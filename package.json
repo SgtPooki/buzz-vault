@@ -3,7 +3,8 @@
     "@buzz/author": "file:vendor/buzz-author-0.0.0-preview.1.tgz",
     "@types/react": "19.2.18",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=24"
@@ -11,7 +12,19 @@
   "name": "sgtpooki.buzz-vault",
   "private": true,
   "scripts": {
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "test": "vitest run"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@filoz/synapse-core": "^0.10.3",
+    "@filoz/synapse-sdk": "^2.0.2",
+    "@helia/unixfs": "^7.2.1",
+    "@ipld/car": "^5.4.7",
+    "@noble/curves": "^2.4.0",
+    "filecoin-encryption-envelope": "^0.1.1",
+    "it-to-buffer": "^5.0.0",
+    "multiformats": "^14.0.5",
+    "viem": "^2.57.17"
+  }
 }

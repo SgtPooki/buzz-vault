@@ -1,0 +1,316 @@
+diff --git a/crates/plugin-manager/src/lib.rs b/crates/plugin-manager/src/lib.rs
+index b689e9c..a36f812 100644
+--- a/crates/plugin-manager/src/lib.rs
++++ b/crates/plugin-manager/src/lib.rs
+@@ -92,6 +92,10 @@ pub struct HostGrants {
+     /// address, one hop at a time, with no cookies; never pages.
+     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+     pub public_images: bool,
++    /// `sendBytesOnce` may also upload raw bytes to any public HTTPS
++    /// address, one hop at a time, with no cookies; port 443 only.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub dynamic_uploads: bool,
+ }
+ #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+ #[serde(deny_unknown_fields)]
+diff --git a/src-tauri/build.rs b/src-tauri/build.rs
+index e8e0d0c..ce5d139 100644
+--- a/src-tauri/build.rs
++++ b/src-tauri/build.rs
+@@ -175,6 +175,7 @@ fn main() {
+             "plugin_host_request",
+             "plugin_host_request_bytes",
+             "plugin_host_upload_bytes_once",
++            "plugin_host_send_bytes_once",
+             "plugin_host_save_bytes",
+             "plugin_host_delete_managed_file",
+             "plugin_host_upload",
+diff --git a/src-tauri/src/host_request.rs b/src-tauri/src/host_request.rs
+index e83cfea..c439589 100644
+--- a/src-tauri/src/host_request.rs
++++ b/src-tauri/src/host_request.rs
+@@ -417,6 +417,150 @@ async fn send_byte_upload(
+     .await
+ }
+ 
++#[derive(Clone, Debug, Deserialize, Serialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(crate) struct ByteSend {
++    pub(crate) url: String,
++    #[serde(default = "default_send_method")]
++    pub(crate) method: String,
++    #[serde(default)]
++    pub(crate) content_type: Option<String>,
++    #[serde(default)]
++    pub(crate) timeout_ms: Option<u64>,
++}
++fn default_send_method() -> String {
++    "PUT".into()
++}
++impl ByteSend {
++    fn fingerprint(&self, bytes: &[u8]) -> Result<[u8; 32], String> {
++        let metadata = serde_json::to_vec(self).map_err(|_| "Invalid send metadata")?;
++        Ok(fingerprint([metadata.as_slice(), bytes]))
++    }
++}
++#[derive(Deserialize)]
++#[serde(deny_unknown_fields)]
++struct ByteSendMetadata {
++    id: String,
++    revision: String,
++    send: ByteSend,
++    once: Once,
++}
++
++enum SendReach {
++    Declared,
++    Dynamic(Vec<std::net::SocketAddr>),
++}
++
++async fn send_reach(grants: &HostGrants, url: &reqwest::Url) -> Result<SendReach, String> {
++    if allows_origin(grants, url) {
++        Ok(SendReach::Declared)
++    } else if grants.dynamic_uploads {
++        let addresses = public_image::public_addresses(url).await?;
++        Ok(SendReach::Dynamic(addresses))
++    } else {
++        Err("Host request origin is not declared".into())
++    }
++}
++
++fn validate_byte_send(send: &ByteSend, bytes: &[u8]) -> Result<(reqwest::Url, reqwest::Method), String> {
++    if bytes.is_empty() || bytes.len() > MAX_RESPONSE_BYTES {
++        return Err("Invalid upload bytes".into());
++    }
++    let method = match send.method.to_ascii_uppercase().as_str() {
++        "PUT" => reqwest::Method::PUT,
++        "POST" => reqwest::Method::POST,
++        _ => return Err("Send method must be PUT or POST".into()),
++    };
++    if let Some(ct) = &send.content_type {
++        if ct.is_empty() || ct.len() > 256 || ct.contains('\r') || ct.contains('\n') {
++            return Err("Invalid content type".into());
++        }
++    }
++    let (url, _, _) = validate_request(&HostRequest {
++        url: send.url.clone(),
++        method: method.as_str().into(),
++        headers: BTreeMap::new(),
++        body: None,
++        timeout_ms: send.timeout_ms,
++    })?;
++    Ok((url, method))
++}
++
++#[tauri::command]
++pub(crate) async fn plugin_host_send_bytes_once<R: tauri::Runtime>(
++    webview: tauri::Webview<R>,
++    calls: tauri::State<'_, HostCalls>,
++    manager: tauri::State<'_, PluginManager>,
++    request: tauri::ipc::Request<'_>,
++) -> Result<HostResponse, String> {
++    let deadline = tokio::time::Instant::now() + DEADLINE;
++    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
++        return Err("Protected upload body must be raw bytes; outcome may be unknown".into());
++    };
++    let metadata = request
++        .headers()
++        .get("x-buzz-upload")
++        .and_then(|v| v.to_str().ok())
++        .filter(|v| v.len() <= MAX_UPLOAD_METADATA)
++        .ok_or("Invalid upload metadata")?;
++    let ByteSendMetadata {
++        id,
++        revision,
++        send,
++        once,
++    } = serde_json::from_str(metadata).map_err(|_| "Invalid upload metadata")?;
++    if id.is_empty() || id.len() > 256 || revision.is_empty() || revision.len() > 128 {
++        return Err("Invalid upload metadata".into());
++    }
++    let (url, method) = validate_byte_send(&send, bytes)?;
++    let operation = async {
++        let _place = crate::host_files::byte_admission(deadline).await?;
++        let grants = byte_grants(manager, &id, &revision).await?;
++        let reach = send_reach(&grants, &url).await?;
++        calls.consume(
++            webview.label(),
++            "send-bytes",
++            &id,
++            &revision,
++            &once,
++            send.fingerprint(bytes)?,
++        )?;
++        send_raw_bytes(url, method, &send, bytes, reach)
++            .await
++            .map_err(|error| format!("{error}; outcome unknown"))
++    };
++    tokio::time::timeout_at(deadline, operation)
++        .await
++        .map_err(|_| "Host upload timed out; outcome unknown")?
++}
++
++async fn send_raw_bytes(
++    url: reqwest::Url,
++    method: reqwest::Method,
++    send: &ByteSend,
++    bytes: &[u8],
++    reach: SendReach,
++) -> Result<HostResponse, String> {
++    let mut builder = reqwest::Client::builder()
++        .redirect(reqwest::redirect::Policy::none())
++        .retry(reqwest::retry::never())
++        .timeout(DEADLINE);
++    if let SendReach::Dynamic(addresses) = &reach {
++        builder = builder.no_proxy().pool_max_idle_per_host(0);
++        if let Some(name) = url.domain() {
++            builder = builder.resolve_to_addrs(name, addresses);
++        }
++    }
++    let client = builder
++        .build()
++        .map_err(|_| "Host request client is unavailable")?;
++    let mut request = client.request(method, url);
++    if let Some(content_type) = &send.content_type {
++        request = request.header(reqwest::header::CONTENT_TYPE, content_type);
++    }
++    read_response(request.body(bytes.to_vec())).await
++}
++
+ /// A GET with no caller headers or body; byte limits apply to actual chunks.
+ #[derive(Deserialize)]
+ #[serde(rename_all = "camelCase", deny_unknown_fields)]
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index 48760d4..9a1ab0a 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -131,7 +131,7 @@ use host_process::{
+ };
+ use host_request::{
+     plugin_host_call_context, plugin_host_request, plugin_host_request_bytes, plugin_host_upload,
+-    plugin_host_upload_bytes_once, HostCalls,
++    plugin_host_upload_bytes_once, plugin_host_send_bytes_once, HostCalls,
+ };
+ use notifications::{notification_show, Notifications};
+ #[cfg(target_os = "macos")]
+@@ -790,6 +790,7 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
+         plugin_host_request,
+         plugin_host_request_bytes,
+         plugin_host_upload_bytes_once,
++        plugin_host_send_bytes_once,
+         plugin_host_save_bytes,
+         plugin_host_delete_managed_file,
+         plugin_host_upload,
+diff --git a/src/app/PluginAccessReview.tsx b/src/app/PluginAccessReview.tsx
+index df35491..17ab09a 100644
+--- a/src/app/PluginAccessReview.tsx
++++ b/src/app/PluginAccessReview.tsx
+@@ -129,6 +129,26 @@ function hostDeclarations(
+           },
+         ]
+       : []),
++    ...(manifest.host?.dynamicUploads
++      ? [
++          {
++            key: "dynamicUploads",
++            signature:
++              "Dynamic uploads: any public HTTPS site · data sent · port 443 only · no cookies",
++            title: "Dynamic uploads:",
++            label: "Send data to public servers discovered at run time",
++            hint: "The plugin may upload data to public servers it discovers at run time. Connections use HTTPS on port 443 only with DNS verification, without your cookies.",
++            icon: GlobeIcon,
++            details: (
++              <p className="m-0">
++                Each upload connects to port 443 on a verified public IP
++                address. Private and loopback addresses are blocked, proxies are
++                disabled, and no cookies or Buzz credentials are sent.
++              </p>
++            ),
++          },
++        ]
++      : []),
+     ...(manifest.host?.federatedIdentity?.operations ?? []).map(
+       (operation) => ({
+         key: `federated:${operation.method} ${operation.path}`,
+diff --git a/src/features/host/service.ts b/src/features/host/service.ts
+index 2f5dc92..5a2aa3e 100644
+--- a/src/features/host/service.ts
++++ b/src/features/host/service.ts
+@@ -39,6 +39,13 @@ export type HostByteUpload = Readonly<{
+   /** At most 16 text fields, safe names, each value at most 8192 UTF-8 bytes. */
+   fields?: Readonly<Record<string, string>>;
+ }>;
++/** Raw bytes upload (PUT/POST) to a declared or dynamic public HTTPS destination. Desktop only. */
++export type HostByteSend = Readonly<{
++  url: string;
++  method?: "PUT" | "POST";
++  contentType?: string;
++  timeoutMs?: number;
++}>;
+ export type HostResponse = Readonly<{
+   status: number;
+   headers: Readonly<Record<string, string>>;
+@@ -676,6 +683,37 @@ export class HostService extends Service implements Host {
+     );
+   }
+ 
++  async sendBytesOnce(
++    bytes: Uint8Array,
++    input: HostByteSend,
++    { callId, isEligible }: HostRequestOnceOptions,
++  ): Promise<HostResponse> {
++    const owner = this.ctx.pluginOwner;
++    if (!owner || !isTauri())
++      throw new Error("Protected requests require an installed desktop plugin");
++    if (
++      !(bytes instanceof Uint8Array) ||
++      bytes.byteLength < 1 ||
++      bytes.byteLength > BYTE_LIMIT
++    )
++      throw new Error("Invalid upload bytes");
++    const snapshot = new Uint8Array(bytes);
++    const metadata = asciiJson({
++      id: owner.id,
++      revision: owner.revision,
++      send: input,
++    });
++    if (metadata.length > UPLOAD_METADATA_LIMIT - 512)
++      throw new Error("Upload metadata is too large");
++    return protectedCall(this.ctx, callId, isEligible, (once) =>
++      invoke<HostResponse>("plugin_host_send_bytes_once", snapshot, {
++        headers: {
++          "x-buzz-upload": `${metadata.slice(0, -1)},"once":${asciiJson(once)}}`,
++        },
++      }),
++    );
++  }
++
+   async requestBytes(input: HostByteRequest): Promise<HostByteResponse> {
+     const ctx = this.ctx;
+     const owner = ctx.pluginOwner;
+diff --git a/src/plugins/api.ts b/src/plugins/api.ts
+index f148ba0..b7671b3 100644
+--- a/src/plugins/api.ts
++++ b/src/plugins/api.ts
+@@ -76,6 +76,9 @@ export type PluginManifest = Readonly<{
+      * address, one hop at a time with no cookies, outside `networkOrigins`.
+      * Redirects and pages come back without a body. */
+     publicImages?: boolean;
++    /** `host.sendBytesOnce` may also upload raw bytes to public HTTPS
++     * addresses discovered at runtime, one hop at a time, port 443 only. */
++    dynamicUploads?: boolean;
+   }>;
+ }>;
+ // Module evaluation must be pure. apply owns resources through ctx.effect.
+diff --git a/src/plugins/author.ts b/src/plugins/author.ts
+index 4e27c82..f3282a1 100644
+--- a/src/plugins/author.ts
++++ b/src/plugins/author.ts
+@@ -9,6 +9,7 @@ export type {
+   Host,
+   HostRequest,
+   HostByteUpload,
++  HostByteSend,
+   HostRequestOnceOptions,
+   HostResponse,
+   HostByteRequest,

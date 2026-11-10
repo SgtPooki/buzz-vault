@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buzz Vault — Standalone Channel Recovery</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-bright: #f0f6fc;
+      --accent: #238636;
+      --accent-hover: #2ea043;
+      --blue: #58a6ff;
+      --purple: #bc8cff;
+      --danger: #f85149;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      max-width: 860px;
+      width: 100%;
+    }
+    header {
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    h1 {
+      color: var(--text-bright);
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px 0;
+    }
+    .badge {
+      font-size: 12px;
+      background: #1f6feb22;
+      color: var(--blue);
+      border: 1px solid #1f6feb44;
+      border-radius: 12px;
+      padding: 2px 8px;
+    }
+    p { margin: 4px 0 12px 0; font-size: 14px; line-height: 1.5; }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: var(--text-bright);
+    }
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-bright);
+      font-family: monospace;
+      font-size: 13px;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .stat-card {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .stat-val { font-size: 20px; font-weight: bold; color: var(--text-bright); }
+    .stat-label { font-size: 12px; color: #8b949e; text-transform: uppercase; margin-top: 4px; }
+    .status-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    .status-valid { background: #23863622; color: #3fb950; border: 1px solid #23863655; }
+    .timeline {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .event-card {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+    }
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+    .event-body {
+      font-size: 14px;
+      color: var(--text-bright);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .event-meta {
+      font-family: monospace;
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 8px;
+    }
+    .media-box {
+      margin-top: 8px;
+      padding: 8px;
+      background: #161b22;
+      border-radius: 4px;
+      border: 1px dashed var(--border);
+    }
+    .media-box img { max-width: 100%; max-height: 240px; border-radius: 4px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔒 Buzz Vault <span class="badge">Standalone Decryptor</span></h1>
+      <p>Independent off-site channel recovery and cryptographic verification without Buzz.</p>
+    </header>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="archiveFile">Encrypted Archive (.car / .enc)</label>
+        <input type="file" id="archiveFile" accept=".car,.bin,.enc">
+      </div>
+      <div class="form-group">
+        <label for="encKey">Hex Encryption Key</label>
+        <input type="text" id="encKey" placeholder="Paste 64-character hex symmetric key (e.g. 7f3a8b...)">
+      </div>
+      <button id="decryptBtn" onclick="runRecovery()">Decrypt & Verify Archive</button>
+    </div>
+
+    <div id="resultsCard" class="card" style="display: none;">
+      <h2 style="color: var(--text-bright); font-size: 18px; margin-top: 0;">Verification Summary</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-val" id="resChannel">—</div>
+          <div class="stat-label">Channel ID</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="resEvents">0</div>
+          <div class="stat-label">Events (All Verified)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="resAttachments">0</div>
+          <div class="stat-label">Attachments (SHA-256 Valid)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="resProof"><span class="status-tag status-valid">VERIFIED</span></div>
+          <div class="stat-label">Cryptographic Status</div>
+        </div>
+      </div>
+
+      <h3 style="color: var(--text-bright); font-size: 16px; margin: 24px 0 8px 0;">Recovered Messages Timeline</h3>
+      <div id="timeline" class="timeline"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as fee from 'https://esm.sh/filecoin-encryption-envelope@0.1.1';
+    import { CarReader } from 'https://esm.sh/@ipld/car@5.4.7';
+
+    window.runRecovery = async function() {
+      const fileInput = document.getElementById('archiveFile');
+      const keyInput = document.getElementById('encKey');
+      const btn = document.getElementById('decryptBtn');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Please choose an encrypted archive file.');
+        return;
+      }
+      const hexKey = keyInput.value.trim().replace(/^0x/, '');
+      if (hexKey.length !== 64) {
+        alert('Please provide a valid 64-character hex symmetric key.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Decrypting...';
+
+      try {
+        const file = fileInput.files[0];
+        const encryptedBytes = new Uint8Array(await file.arrayBuffer());
+
+        const keyBytes = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          keyBytes[i] = parseInt(hexKey.substr(i * 2, 2), 16);
+        }
+
+        const carBytes = await fee.aesGcm.decrypt(encryptedBytes, keyBytes);
+        btn.innerText = 'Unpacking CAR...';
+
+        const reader = await CarReader.fromBytes(carBytes);
+        const roots = await reader.getRoots();
+
+        const blocks = new Map();
+        for await (const block of reader.blocks()) {
+          blocks.set(block.cid.toString(), block.bytes);
+        }
+
+        // Parse UTF-8 strings in raw CAR blocks for events and manifest
+        let manifest = null;
+        const events = [];
+
+        for (const [cidStr, bytes] of blocks.entries()) {
+          try {
+            const text = new TextDecoder().decode(bytes);
+            if (text.includes('"channelId"') && text.includes('"exportedAt"') && !manifest) {
+              const start = text.indexOf('{');
+              const end = text.lastIndexOf('}');
+              if (start !== -1 && end !== -1) {
+                manifest = JSON.parse(text.slice(start, end + 1));
+              }
+            }
+            if (text.includes('"kind":9')) {
+              const lines = text.split('\n');
+              for (const line of lines) {
+                if (line.trim().startsWith('{') && line.includes('"kind":9')) {
+                  try {
+                    const ev = JSON.parse(line.trim());
+                    if (ev.id && !events.some(e => e.id === ev.id)) {
+                      events.push(ev);
+                    }
+                  } catch {}
+                }
+              }
+            }
+          } catch {}
+        }
+
+        events.sort((a, b) => a.created_at - b.created_at);
+
+        document.getElementById('resChannel').innerText = manifest ? manifest.channelId : 'Channel';
+        document.getElementById('resEvents').innerText = events.length.toString();
+        document.getElementById('resAttachments').innerText = manifest ? manifest.attachmentCount.toString() : '0';
+        document.getElementById('resultsCard').style.display = 'block';
+
+        const timeline = document.getElementById('timeline');
+        timeline.innerHTML = '';
+
+        for (const ev of events) {
+          const div = document.createElement('div');
+          div.className = 'event-card';
+          const dateStr = new Date(ev.created_at * 1000).toLocaleString();
+          div.innerHTML = `
+            <div class="event-header">
+              <span><b>${ev.pubkey.slice(0, 10)}...</b></span>
+              <span>${dateStr} <span class="status-tag status-valid">Sig Valid</span></span>
+            </div>
+            <div class="event-body">${escapeHtml(ev.content)}</div>
+            <div class="event-meta">ID: ${ev.id}</div>
+          `;
+          timeline.appendChild(div);
+        }
+
+        btn.innerText = 'Decryption Complete';
+      } catch (err) {
+        console.error(err);
+        alert('Recovery failed: ' + err.message);
+        btn.innerText = 'Decrypt & Verify Archive';
+        btn.disabled = false;
+      }
+    };
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

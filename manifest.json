@@ -1,5 +1,16 @@
 {
   "id": "sgtpooki.buzz-vault",
   "name": "Buzz Vault",
-  "apiVersion": 1
+  "apiVersion": 1,
+  "description": "Encrypted off-site channel archiving to Filecoin Onchain Cloud",
+  "host": {
+    "dynamicUploads": true,
+    "managedFiles": true,
+    "processes": [
+      {
+        "id": "pin",
+        "program": "filecoin-pin"
+      }
+    ]
+  }
 }

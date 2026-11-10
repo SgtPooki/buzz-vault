@@ -1,17 +1,33 @@
 import type { Context } from '@buzz/author';
+import { createSettingsCardComponent } from './ui/SettingsCard.js';
+import { createVaultChannelLauncher, createVaultPanelComponent } from './ui/VaultPanel.js';
+import { createVaultArchiveTool } from './agent-tool.js';
 
-export const inject = ['react', 'pages'];
+export const inject = ['react', 'panels', 'settingsCards', 'agents', 'host'];
 
 export function apply(ctx: Context) {
-  const React = ctx.react;
-  // Plugin resources belong in ctx.effect(() => cleanup).
-  // React effects belong to the visible page and stop when navigating away.
-  // primary gives the page a sidebar row; every active page is still listed in search.
-  ctx.pages.register({ id: "main", title: "My page", primary: true, component: function Page() {
-    const [count, setCount] = React.useState(0);
-    return <section>
-      <h1>My page</h1>
-      <button type='button' onClick={() => setCount(count + 1)}>Clicked {count} times</button>
-    </section>;
-  }});
+  // 1. Register Filecoin Vault Settings Card
+  const SettingsCardComponent = createSettingsCardComponent(ctx);
+  ctx.settingsCards.register({
+    id: 'buzz-vault-settings',
+    title: 'Filecoin Vault',
+    group: 'Storage & Backup',
+    component: SettingsCardComponent,
+  });
+
+  // 2. Register Channel Header Launcher & Side Panel
+  const VaultPanelComponent = createVaultPanelComponent(ctx);
+  const VaultLauncherComponent = createVaultChannelLauncher(ctx);
+  ctx.panels.register({
+    id: 'buzz-vault',
+    title: 'Buzz Vault',
+    matches: (url: string) => url.startsWith('buzz://vault') || url === 'vault',
+    channelPlacement: 'side',
+    channelLauncher: VaultLauncherComponent,
+    component: VaultPanelComponent,
+  });
+
+  // 3. Register vault_archive Agent Tool
+  const vaultTool = createVaultArchiveTool(ctx.host);
+  ctx.agents.addTool(vaultTool);
 }
