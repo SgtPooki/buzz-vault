@@ -8,10 +8,10 @@ import { unpackAndVerifyCar } from './decryptor.js';
 
 function createSignedEvent(privKeyHex: string, kind: number, content: string, tags: string[][], createdAt: number) {
   const privKey = Buffer.from(privKeyHex, 'hex');
-  const pubkey = Buffer.from(secp256k1.getPublicKey(privKey, true)).toString('hex').slice(2);
+  const pubkey = Buffer.from(schnorr.getPublicKey(privKey)).toString('hex');
   const serialized = JSON.stringify([0, pubkey, createdAt, kind, tags, content]);
   const id = sha256(new TextEncoder().encode(serialized)).slice(2);
-  const sig = Buffer.from(schnorr.sign(id, privKey)).toString('hex');
+  const sig = Buffer.from(schnorr.sign(Buffer.from(id, 'hex'), privKey)).toString('hex');
   return { id, pubkey, created_at: createdAt, kind, tags, content, sig };
 }
 
