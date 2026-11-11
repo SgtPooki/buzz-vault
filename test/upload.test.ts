@@ -144,3 +144,30 @@ it('fetch shim passes non-HTTP schemes (Tauri IPC) to native fetch', async () =>
     globalThis.fetch = native;
   }
 });
+
+it('fetch shim sends a bodiless Request through host.request and a Blob PUT through sendBytesOnce', async () => {
+  const { installHostFetchShim } = await import('../src/upload');
+  const native = globalThis.fetch;
+  const requests: any[] = [];
+  const sends: any[] = [];
+  const host: any = {
+    request: async (r: any) => { requests.push(r); return { status: 201, headers: { Location: '/pdp/piece/uploads/abc' }, body: '' }; },
+    sendBytesOnce: async (b: Uint8Array, s: any) => { sends.push({ len: b.length, ...s }); return { status: 204, headers: {}, body: '' }; },
+  };
+  const uninstall = installHostFetchShim(host, []);
+  try {
+    const created = await fetch(new Request('https://sp.example/pdp/piece/uploads', { method: 'POST' }));
+    expect(created.status).toBe(201);
+    expect(requests[0]).toMatchObject({ method: 'POST', url: 'https://sp.example/pdp/piece/uploads' });
+    expect(requests[0].body).toBeUndefined();
+    const put = await fetch('https://sp.example/pdp/piece/uploads/abc', { method: 'PUT', body: new Blob([new Uint8Array([1, 2, 3])]), headers: { 'Content-Type': 'application/octet-stream' } });
+    expect(put.status).toBe(204);
+    expect(sends[0]).toMatchObject({ len: 3, method: 'PUT', contentType: 'application/octet-stream' });
+    await fetch('https://sp.example/pdp/piece/uploads/abc', { method: 'POST', body: '{"pieceCid":"x"}', headers: { 'Content-Type': 'application/json' } });
+    expect(requests[1].body).toBe('{"pieceCid":"x"}');
+    expect(sends).toHaveLength(1);
+  } finally {
+    uninstall();
+    globalThis.fetch = native;
+  }
+});

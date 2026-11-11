@@ -33,6 +33,20 @@ export interface SynapseUploadOptions {
   onProgress?: (bytesUploaded: number) => void;
 }
 
+// Collects any fetch body kind into bytes; empty means no body.
+async function readBody(body: unknown): Promise<Uint8Array> {
+  if (body == null) return new Uint8Array(0);
+  if (typeof body === 'string') return new TextEncoder().encode(body);
+  if (body instanceof Uint8Array) return body;
+  if (body instanceof ArrayBuffer) return new Uint8Array(body);
+  if (ArrayBuffer.isView(body)) return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  if (body instanceof Request || body instanceof Blob || body instanceof Response) {
+    return new Uint8Array(await body.arrayBuffer());
+  }
+  if (body instanceof ReadableStream) return new Uint8Array(await new Response(body).arrayBuffer());
+  return new TextEncoder().encode(String(body));
+}
+
 // Installs a global fetch shim routing non-declared origins through the patched host
 export function installHostFetchShim(host: Host, networkOrigins: readonly string[] = []): () => void {
   const originalFetch = globalThis.fetch;
@@ -83,30 +97,16 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
       });
     }
 
-    let bodyData: any = init?.body;
-    if (!bodyData && input instanceof Request) {
-      try {
-        bodyData = await input.arrayBuffer();
-      } catch {
-        // body might be empty or consumed
-      }
-    }
-
-    const isBinaryBody =
-      bodyData instanceof Uint8Array ||
-      bodyData instanceof ArrayBuffer ||
-      (typeof (globalThis as any).Buffer !== 'undefined' && (globalThis as any).Buffer.isBuffer(bodyData));
+    const bytes = await readBody(init?.body ?? (input instanceof Request ? input : undefined));
+    const contentType = headers['content-type'] || headers['Content-Type'] || '';
+    const isText = /json|text|x-www-form-urlencoded/i.test(contentType);
+    const isBinaryBody = bytes.length > 0 && !isText;
 
     if (isBinaryBody && (method === 'PUT' || method === 'POST')) {
       if (typeof host.sendBytesOnce !== 'function') {
         throw new Error('Host does not support sendBytesOnce primitive');
       }
-      const bytes =
-        bodyData instanceof Uint8Array ? bodyData : new Uint8Array(bodyData);
-      const contentType =
-        headers['content-type'] ||
-        headers['Content-Type'] ||
-        'application/octet-stream';
+      const sendType = contentType || 'application/octet-stream';
       const callId = crypto.randomUUID();
 
       const res = await host.sendBytesOnce(
@@ -114,7 +114,7 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
         {
           url: urlString,
           method: method as 'PUT' | 'POST',
-          contentType,
+          contentType: sendType,
         },
         { callId }
       ).catch((e: unknown) => {
@@ -133,14 +133,7 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
       });
     }
 
-    let bodyString: string | undefined = undefined;
-    if (bodyData) {
-      if (typeof bodyData === 'string') {
-        bodyString = bodyData;
-      } else {
-        bodyString = new TextDecoder().decode(bodyData);
-      }
-    }
+    const bodyString = bytes.length > 0 ? new TextDecoder().decode(bytes) : undefined;
 
     const res = await host.request({
       url: urlString,
