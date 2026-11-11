@@ -112,7 +112,10 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
           contentType,
         },
         { callId }
-      );
+      ).catch((e: unknown) => {
+        console.warn('[vault] sendBytesOnce failed', urlString, String(e));
+        throw new Error(`sendBytesOnce ${urlString}: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+      });
 
       const responseBody =
         res.status === 204 || res.status === 205 || res.status === 304
@@ -139,6 +142,9 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
       method: method as any,
       headers,
       ...(bodyString !== undefined ? { body: bodyString } : {}),
+    }).catch((e: unknown) => {
+      console.warn('[vault] host.request failed', method, urlString, String(e));
+      throw new Error(`host.request ${method} ${urlString}: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
     });
 
     const responseBody =

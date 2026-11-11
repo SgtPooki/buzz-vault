@@ -132,7 +132,10 @@ export function createVaultPanelComponent(ctx: Context) {
         });
         setStep('done');
       } catch (err: any) {
-        setErrorMessage(err?.message || String(err));
+        const chain: string[] = [];
+        for (let e: any = err; e && chain.length < 6; e = e.cause) chain.push(e?.message || String(e));
+        console.warn('[vault] archive failed', chain.join(' | '));
+        setErrorMessage(chain.join(' | '));
         setStep('error');
       } finally {
         setArchiving(false);
