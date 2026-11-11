@@ -103,13 +103,15 @@ export function viewerLink(pieceCid: string, retrievalUrls: readonly string[]): 
   return `${VIEWER_URL}?piece=${pieceCid}${src}`;
 }
 
-export function formatSealCard(r: Pick<SealRecord, 'agent' | 'pieceCid' | 'dataSetId' | 'providers' | 'retrievalUrls' | 'signatures'>, agentName = r.agent): string {
+export function formatSealCard(r: Pick<SealRecord, 'agent' | 'pieceCid' | 'rootCid' | 'dataSetId' | 'providers' | 'retrievalUrls' | 'signatures'>, agentName = r.agent): string {
   const { signatures: s } = r;
   const sig = s.verified === s.total ? `${s.total} signed messages verified` : `${s.verified} of ${s.total} signatures verified`;
   const where = r.dataSetId ? `Filecoin Calibration, data set ${r.dataSetId}` : 'Filecoin Calibration';
   return [
     `**${agentName} finished** · ${sig} · saved on ${where} · ${r.providers.length} copies`,
     `[Open result](${viewerLink(r.pieceCid, r.retrievalUrls)}) · piece \`${r.pieceCid.slice(0, 12)}…${r.pieceCid.slice(-6)}\``,
+    // Full root CID and piece URL on their own line so a CID card can fetch the CAR and preview the root
+    `${r.rootCid} ${r.retrievalUrls[0] ?? ''}`.trim(),
   ].join('\n');
 }
 
