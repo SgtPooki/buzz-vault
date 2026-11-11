@@ -128,3 +128,19 @@ describe('upload module - fetch shim', () => {
     }
   });
 });
+
+it('fetch shim passes non-HTTP schemes (Tauri IPC) to native fetch', async () => {
+  const { installHostFetchShim } = await import('../src/upload');
+  const native = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: any) => { calls.push(String(input)); return new Response('ok'); }) as any;
+  const host: any = { request: async () => { throw new Error('must not route ipc'); }, sendBytesOnce: async () => { throw new Error('must not route ipc'); } };
+  const uninstall = installHostFetchShim(host, []);
+  try {
+    await fetch('ipc://localhost/plugin_host_request', { method: 'POST', body: new Uint8Array([1]) });
+    expect(calls).toEqual(['ipc://localhost/plugin_host_request']);
+  } finally {
+    uninstall();
+    globalThis.fetch = native;
+  }
+});

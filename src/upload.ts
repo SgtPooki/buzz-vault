@@ -49,6 +49,11 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
         : input.url;
     const url = new URL(urlString);
 
+    // Only public HTTP(S) goes through the host; Tauri IPC and friends keep native fetch.
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      return originalFetch(input, init);
+    }
+
     const isDeclaredOrigin = networkOrigins.some((orig) => {
       try {
         return new URL(orig).origin === url.origin;
