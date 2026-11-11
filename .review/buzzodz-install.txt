@@ -1,0 +1,1 @@
+Installed sgtpooki.buzz-vault (enabled) in profile default. Publisher: unsigned

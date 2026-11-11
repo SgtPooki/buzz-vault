@@ -38,7 +38,7 @@ index 485fb28..1c3ae3f 100644
      "allow-plugin-host-delete-managed-file",
      "allow-plugin-host-upload",
 diff --git a/src-tauri/src/host_request.rs b/src-tauri/src/host_request.rs
-index e83cfea..544520b 100644
+index e83cfea..e1a1e55 100644
 --- a/src-tauri/src/host_request.rs
 +++ b/src-tauri/src/host_request.rs
 @@ -247,9 +247,7 @@ pub(crate) async fn plugin_host_request<R: tauri::Runtime>(
@@ -253,6 +253,49 @@ index e83cfea..544520b 100644
  /// A GET with no caller headers or body; byte limits apply to actual chunks.
  #[derive(Deserialize)]
  #[serde(rename_all = "camelCase", deny_unknown_fields)]
+@@ -459,6 +636,24 @@ pub(crate) async fn plugin_host_request_bytes(
+                     .timeout(Duration::from_millis(timeout));
+                 read_bytes(get, request.max_bytes).await?
+             }
++            ByteReach::Dynamic => {
++                let addresses = public_image::public_addresses(&url).await?;
++                let mut builder = reqwest::Client::builder()
++                    .redirect(reqwest::redirect::Policy::none())
++                    .retry(reqwest::retry::never())
++                    .no_proxy()
++                    .pool_max_idle_per_host(0);
++                if let Some(name) = url.domain() {
++                    builder = builder.resolve_to_addrs(name, &addresses);
++                }
++                let client = builder
++                    .build()
++                    .map_err(|_| "Host request client is unavailable")?;
++                let get = client
++                    .get(url.clone())
++                    .timeout(Duration::from_millis(timeout));
++                read_bytes(get, request.max_bytes).await?
++            }
+             ByteReach::PublicImage => {
+                 let addresses = public_image::public_addresses(&url).await?;
+                 public_image::fetch(
+@@ -486,6 +681,8 @@ pub(crate) async fn plugin_host_request_bytes(
+ enum ByteReach {
+     Declared,
+     PublicImage,
++    /// `host.dynamicUploads`: any public HTTPS address, DNS-pinned, one hop.
++    Dynamic,
+ }
+ 
+ async fn byte_grants(
+@@ -521,6 +718,8 @@ fn upload_origin(grants: &HostGrants, url: &reqwest::Url) -> Result<(), String>
+ fn reach(grants: &HostGrants, url: &reqwest::Url) -> Option<ByteReach> {
+     if allows_origin(grants, url) {
+         Some(ByteReach::Declared)
++    } else if grants.dynamic_uploads && url.scheme() == "https" {
++        Some(ByteReach::Dynamic)
+     } else if grants.public_images {
+         Some(ByteReach::PublicImage)
+     } else {
 diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
 index 48760d4..9a1ab0a 100644
 --- a/src-tauri/src/lib.rs

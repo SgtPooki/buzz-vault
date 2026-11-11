@@ -1,6 +1,9 @@
 import type { AddedTool, BuzzClient, AddedToolContext, AddedToolReply, Host } from '@buzz/author';
 import { exportChannel } from './export.js';
 import { encryptCar, hexToBytes } from './encrypt.js';
+import { loadSeals } from './seal.js';
+import { readSealCar } from './read-car.js';
+import { verifyAll } from './verify.js';
 import { uploadArchiveWithSynapse } from './upload.js';
 import { formatReceiptMessage } from './receipt.js';
 import { loadSession } from './connect.js';
@@ -108,6 +111,49 @@ export function createVaultArchiveTool(host?: Host): AddedTool {
       });
 
       return `Channel ${channelId} successfully archived to Filecoin!\nPiece CID: ${uploadResult.pieceCid}\nData Set ID: ${uploadResult.dataSetId ?? 'pending'}\nEvents: ${exportResult.coverage.eventCount}\nAttachments: ${exportResult.coverage.attachmentCount}\nReceipt posted to channel.`;
+    },
+  };
+}
+
+// Lets any agent fetch and verify a sealed turn by piece CID, from the SP that holds it
+export function createVaultTurnGetTool(host: Host): AddedTool {
+  return {
+    name: 'vault_turn_get',
+    description: 'Fetch a sealed agent turn from Filecoin by piece CID, verify every message signature, and return the transcript.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pieceCid: { type: 'string', description: 'Piece CID from a Buzz Vault seal card.' },
+        url: { type: 'string', description: 'Optional retrieval URL if the seal is not in this device\'s index.' },
+      },
+      required: ['pieceCid'],
+    },
+    async call(_client: BuzzClient, _context: AddedToolContext, args: Record<string, unknown>): Promise<AddedToolReply> {
+      const pieceCid = String(args.pieceCid ?? '');
+      const record = loadSeals().find((s) => s.pieceCid === pieceCid);
+      const urls = [args.url, ...(record?.retrievalUrls ?? [])].filter((u): u is string => typeof u === 'string' && u.length > 0);
+      if (urls.length === 0) return `No retrieval URL known for ${pieceCid}; pass url.`;
+      if (!host.requestBytes) return 'This host cannot read bytes.';
+      let bytes: Uint8Array | undefined;
+      for (const url of urls) {
+        try {
+          const res = await host.requestBytes({ url, maxBytes: 16 * 1024 * 1024, timeoutMs: 30000 });
+          if (res.status === 200 && res.body.byteLength > 0) {
+            bytes = res.body;
+            break;
+          }
+        } catch {
+          // try the next copy
+        }
+      }
+      if (!bytes) return `Could not fetch ${pieceCid} from ${urls.length} known copies.`;
+      const { events, manifest } = await readSealCar(bytes);
+      const { results, allValid } = verifyAll(events);
+      const lines = events.map((e) => `[${new Date(e.created_at * 1000).toISOString()}] ${e.pubkey.slice(0, 8)}: ${e.content}`);
+      return [
+        `Sealed turn by ${manifest?.agent ?? 'unknown agent'}: ${events.length} events, ${results.filter((r) => r.signatureValid).length} signatures valid${allValid ? '' : ' (SOME INVALID)'}.`,
+        ...lines,
+      ].join('\n');
     },
   };
 }
