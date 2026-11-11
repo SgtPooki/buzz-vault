@@ -25,11 +25,84 @@ index e8e0d0c..ce5d139 100644
              "plugin_host_save_bytes",
              "plugin_host_delete_managed_file",
              "plugin_host_upload",
+diff --git a/src-tauri/capabilities/default.json b/src-tauri/capabilities/default.json
+index 485fb28..1c3ae3f 100644
+--- a/src-tauri/capabilities/default.json
++++ b/src-tauri/capabilities/default.json
+@@ -121,6 +121,7 @@
+     "allow-plugin-host-request",
+     "allow-plugin-host-request-bytes",
+     "allow-plugin-host-upload-bytes-once",
++    "allow-plugin-host-send-bytes-once",
+     "allow-plugin-host-save-bytes",
+     "allow-plugin-host-delete-managed-file",
+     "allow-plugin-host-upload",
 diff --git a/src-tauri/src/host_request.rs b/src-tauri/src/host_request.rs
-index e83cfea..c439589 100644
+index e83cfea..544520b 100644
 --- a/src-tauri/src/host_request.rs
 +++ b/src-tauri/src/host_request.rs
-@@ -417,6 +417,150 @@ async fn send_byte_upload(
+@@ -247,9 +247,7 @@ pub(crate) async fn plugin_host_request<R: tauri::Runtime>(
+         })
+         .await
+         .map_err(|_| "Host request is unavailable")?;
+-        if !allows_origin(&grants, &url) {
+-            return Err("Host request origin is not declared".into());
+-        }
++        let reach = send_reach(&grants, &url).await?;
+         if let Some(once) = &once {
+             if request.method != "POST" {
+                 return Err("Protected requests require POST".into());
+@@ -263,13 +261,48 @@ pub(crate) async fn plugin_host_request<R: tauri::Runtime>(
+                 request.fingerprint(),
+             )?;
+         }
+-        send_request_with_policy(url, method, headers, request.body, deadline, once.is_some()).await
++        match reach {
++            SendReach::Declared => {
++                send_request_with_policy(url, method, headers, request.body, deadline, once.is_some()).await
++            }
++            SendReach::Dynamic(addresses) => {
++                send_dynamic_request(url, method, headers, request.body, deadline, &addresses).await
++            }
++        }
+     };
+     tokio::time::timeout(deadline, operation)
+         .await
+         .map_err(|_| "Host request timed out")?
+ }
+ 
++/// A text request to a dynamic public HTTPS origin, DNS-pinned like `send_raw_bytes`.
++async fn send_dynamic_request(
++    url: reqwest::Url,
++    method: reqwest::Method,
++    headers: HeaderMap,
++    body: Option<String>,
++    deadline: Duration,
++    addresses: &[std::net::SocketAddr],
++) -> Result<HostResponse, String> {
++    let mut builder = reqwest::Client::builder()
++        .redirect(reqwest::redirect::Policy::none())
++        .retry(reqwest::retry::never())
++        .no_proxy()
++        .pool_max_idle_per_host(0)
++        .timeout(deadline);
++    if let Some(name) = url.domain() {
++        builder = builder.resolve_to_addrs(name, addresses);
++    }
++    let client = builder
++        .build()
++        .map_err(|_| "Host request client is unavailable")?;
++    let mut request = client.request(method, url).headers(headers);
++    if let Some(body) = body {
++        request = request.body(body);
++    }
++    read_response(request).await
++}
++
+ const MAX_UPLOAD_METADATA: usize = 16 * 1024;
+ 
+ #[derive(Deserialize, Serialize)]
+@@ -417,6 +450,150 @@ async fn send_byte_upload(
      .await
  }
  
