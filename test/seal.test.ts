@@ -69,8 +69,8 @@ describe('seal', () => {
   it('writes a card with no placeholders', () => {
     const events = [signed('x')];
     const { manifest } = buildSealFiles(work, events);
-    const card = formatSealCard({ agent: 'Atlas', pieceCid: 'bafkzcibdabc123456789xyz', rootCid: 'bafyroot', dataSetId: '52644', providers: ['9', '2'], retrievalUrls: ['https://sp/public/x', 'https://sp2/public/x'], signatures: manifest.signatures });
-    expect(card).toContain('src=https%3A%2F%2Fsp2%2Fpublic%2Fx');
+    const card = formatSealCard({ agent: 'Atlas', pieceCid: 'bafkzcibdabc123456789xyz', rootCid: 'bafyroot', dataSetId: '52644', providers: ['9', '2'], retrievalUrls: ['https://sp/piece/x', 'https://sp2/public/x'], signatures: manifest.signatures });
+    expect(card).toContain('src=https%3A%2F%2Fsp%2Fpiece%2Fx');
     expect(card).toContain('Atlas finished');
     expect(card).toContain('1 signed messages verified');
     expect(card).toContain('data set 52644');

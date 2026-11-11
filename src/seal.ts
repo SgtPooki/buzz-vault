@@ -111,7 +111,7 @@ export function formatSealCard(r: Pick<SealRecord, 'agent' | 'pieceCid' | 'rootC
     `**${agentName} finished** · ${sig} · saved on ${where} · ${r.providers.length} copies`,
     `[Open result](${viewerLink(r.pieceCid, r.retrievalUrls)}) · piece \`${r.pieceCid.slice(0, 12)}…${r.pieceCid.slice(-6)}\``,
     // Full root CID and piece URL on their own line so a CID card can fetch the CAR and preview the root
-    `${r.rootCid} ${r.retrievalUrls[0] ?? ''}`.trim(),
+    `${r.rootCid} ${(r.retrievalUrls[0] ?? '').replace('/piece/', '/public/')}`.trim(),
   ].join('\n');
 }
 
