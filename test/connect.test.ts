@@ -15,9 +15,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildAuthorizeUrl,
   clearSession,
+  DEFAULT_FILECOIN_PIN_SESSION_PATH,
   generateSessionKeypair,
   loadSession,
   parseSessionEnv,
+  readHostSessionEnv,
   saveSession,
   STORAGE_KEY,
   tryReadHostSessionEnv,
@@ -324,7 +326,18 @@ SCOPES=createDataSet,addPieces,encrypt
     })
   })
 
-  describe('tryReadHostSessionEnv', () => {
+  describe('tryReadHostSessionEnv and readHostSessionEnv', () => {
+    it('defines default filecoin-pin session path', () => {
+      expect(DEFAULT_FILECOIN_PIN_SESSION_PATH).toContain('filecoin-pin/session.env')
+    })
+
+    it('readHostSessionEnv throws when host.readFile is missing or file empty', async () => {
+      await expect(readHostSessionEnv({} as any, 'some/path')).rejects.toThrow('Host file reading is not supported')
+      await expect(
+        readHostSessionEnv({ readFile: vi.fn().mockResolvedValue(new Uint8Array(0)) }, 'some/path')
+      ).rejects.toThrow('is empty')
+    })
+
     it('returns null if host or host.readFile is missing', async () => {
       expect(await tryReadHostSessionEnv(undefined)).toBeNull()
       expect(await tryReadHostSessionEnv({})).toBeNull()

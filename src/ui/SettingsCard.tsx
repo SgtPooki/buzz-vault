@@ -4,11 +4,13 @@ import {
   saveSession,
   clearSession,
   parseSessionEnv,
+  readHostSessionEnv,
   tryReadHostSessionEnv,
   generateSessionKeypair,
   buildAuthorizeUrl,
   watchAuthorization,
   DEFAULT_CONSOLE_URL,
+  DEFAULT_FILECOIN_PIN_SESSION_PATH,
   DEFAULT_SCOPES,
   DEFAULT_CHAIN_ID,
   type VaultSession,
@@ -27,9 +29,30 @@ export function createSettingsCardComponent(ctx: Context) {
     const [connectProgress, setConnectProgress] = React.useState<string | null>(null);
     const [activeAuthorizeUrl, setActiveAuthorizeUrl] = React.useState<string | null>(null);
     const [isDragging, setIsDragging] = React.useState(false);
+    const [pathInput, setPathInput] = React.useState(DEFAULT_FILECOIN_PIN_SESSION_PATH);
     const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
     const abortRef = React.useRef<boolean>(false);
     const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+    const handleLoadFromPath = async () => {
+      try {
+        if (!pathInput.trim()) {
+          setStatusMessage('Please enter a valid file path.');
+          return;
+        }
+        if (!ctx.host?.readFile) {
+          setStatusMessage('Host file reading is not available in this environment.');
+          return;
+        }
+        const loaded = await readHostSessionEnv(ctx.host, pathInput.trim());
+        saveSession(loaded);
+        setSession(loaded);
+        setDetectedSession(null);
+        setStatusMessage(`Session loaded from ${pathInput.trim()}`);
+      } catch (err: any) {
+        setStatusMessage(`Failed to read path: ${err?.message || String(err)}`);
+      }
+    };
 
     // Check for existing filecoin-pin session on host upon loading
     React.useEffect(() => {
@@ -345,6 +368,51 @@ export function createSettingsCardComponent(ctx: Context) {
               <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 12px 0' }}>
                 Load an existing session file from <code>filecoin-pin</code>.
               </p>
+
+              {/* Path input prefilled with default filecoin-pin path */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Default filecoin-pin path:
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={pathInput}
+                    onChange={(e) => setPathInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      padding: '7px 10px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLoadFromPath}
+                    style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '7px 14px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Load Path
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', fontSize: '11px', color: '#64748b', margin: '10px 0' }}>
+                — or select / drop a file —
+              </div>
 
               <input
                 ref={fileInputRef}

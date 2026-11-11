@@ -456,25 +456,39 @@ export function parseSessionEnv(text: string): VaultSession {
   }
 }
 
+export const DEFAULT_FILECOIN_PIN_SESSION_PATH = '~/Library/Application Support/filecoin-pin/session.env'
+
+// Reads and parses session.env from a specific host path via host.readFile
+export async function readHostSessionEnv(
+  host: { readFile?: (path: string) => Promise<Uint8Array> },
+  path: string
+): Promise<VaultSession> {
+  if (!host?.readFile) {
+    throw new Error('Host file reading is not supported in this environment')
+  }
+  const bytes = await host.readFile(path)
+  if (!bytes || bytes.length === 0) {
+    throw new Error(`File at ${path} is empty`)
+  }
+  const text = new TextDecoder().decode(bytes)
+  return parseSessionEnv(text)
+}
+
 // Tries reading session.env from standard filecoin-pin config directories via host.readFile
 export async function tryReadHostSessionEnv(host?: { readFile?: (path: string) => Promise<Uint8Array> }): Promise<VaultSession | null> {
-  if (!host?.readFile) return null;
+  if (!host?.readFile) return null
   const paths = [
-    '~/Library/Application Support/filecoin-pin/session.env',
+    DEFAULT_FILECOIN_PIN_SESSION_PATH,
     '~/.config/filecoin-pin/session.env',
-  ];
+  ]
   for (const p of paths) {
     try {
-      const bytes = await host.readFile(p);
-      if (bytes && bytes.length > 0) {
-        const text = new TextDecoder().decode(bytes);
-        return parseSessionEnv(text);
-      }
+      return await readHostSessionEnv(host, p)
     } catch {
       // Continue to next candidate path
     }
   }
-  return null;
+  return null
 }
 
 

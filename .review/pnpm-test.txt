@@ -5,17 +5,17 @@
 
  RUN  v3.2.7 /Users/sgtpooki/code/work/filoz/buzz-vault
 
- ✓ test/receipt.test.ts (3 tests) 46ms
- ✓ test/encrypt.test.ts (7 tests) 30ms
- ✓ test/export.test.ts (11 tests) 14ms
- ✓ test/connect.test.ts (17 tests) 42ms
- ✓ test/decryptor.test.ts (2 tests) 15ms
+ ✓ test/receipt.test.ts (3 tests) 6ms
+ ✓ test/encrypt.test.ts (7 tests) 15ms
+ ✓ test/export.test.ts (11 tests) 15ms
+ ✓ test/connect.test.ts (19 tests) 33ms
+ ✓ test/decryptor.test.ts (2 tests) 17ms
  ✓ test/upload.test.ts (3 tests) 7ms
- ✓ test/drill.test.ts (1 test) 51ms
+ ✓ test/drill.test.ts (1 test) 52ms
  ✓ test/agent-tool.test.ts (2 tests) 11ms
 
  Test Files  8 passed (8)
-      Tests  46 passed (46)
-   Start at  21:46:30
-   Duration  1.04s (transform 318ms, setup 0ms, collect 3.57s, tests 216ms, environment 1ms, prepare 517ms)
+      Tests  48 passed (48)
+   Start at  21:49:00
+   Duration  959ms (transform 325ms, setup 0ms, collect 3.32s, tests 156ms, environment 1ms, prepare 391ms)
 
