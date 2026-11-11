@@ -103,12 +103,12 @@ export function viewerLink(pieceCid: string, retrievalUrls: readonly string[]): 
   return `${VIEWER_URL}?piece=${pieceCid}${src}`;
 }
 
-export function formatSealCard(r: Pick<SealRecord, 'agent' | 'pieceCid' | 'dataSetId' | 'providers' | 'retrievalUrls' | 'signatures'>): string {
+export function formatSealCard(r: Pick<SealRecord, 'agent' | 'pieceCid' | 'dataSetId' | 'providers' | 'retrievalUrls' | 'signatures'>, agentName = r.agent): string {
   const { signatures: s } = r;
   const sig = s.verified === s.total ? `${s.total} signed messages verified` : `${s.verified} of ${s.total} signatures verified`;
   const where = r.dataSetId ? `Filecoin Calibration, data set ${r.dataSetId}` : 'Filecoin Calibration';
   return [
-    `**${r.agent} finished** · ${sig} · saved on ${where} · ${r.providers.length} copies`,
+    `**${agentName} finished** · ${sig} · saved on ${where} · ${r.providers.length} copies`,
     `[Open result](${viewerLink(r.pieceCid, r.retrievalUrls)}) · piece \`${r.pieceCid.slice(0, 12)}…${r.pieceCid.slice(-6)}\``,
   ].join('\n');
 }
@@ -167,15 +167,15 @@ export function saveSeal(record: SealRecord) {
   localStorage.setItem(SEALS_KEY, JSON.stringify([...rest, record].slice(-200)));
 }
 
-async function postCard(session: RelaySessionLike, w: LocalWork, record: SealRecord) {
-  const card = formatSealCard(record);
+async function postCard(session: RelaySessionLike, w: LocalWork, record: SealRecord, agentName?: string) {
+  const card = formatSealCard(record, agentName);
   // The host sets threadRootId to the request for channel work and to the thread root inside one
   if (HEX64.test(w.threadRootId)) await session.messages.reply(w.channelId, w.threadRootId, card);
   else await session.messages.send(w.channelId, card);
 }
 
 // One turn: upload once, then post the card; a failed card retries without re-uploading
-export async function sealAndPost(session: RelaySessionLike, host: Host, w: LocalWork, live: Map<string, any>): Promise<SealRecord> {
+export async function sealAndPost(session: RelaySessionLike, host: Host, w: LocalWork, live: Map<string, any>, agentName?: string): Promise<SealRecord> {
   const key = workKey(w);
   let record = loadSeals().find((s) => s.key === key);
   if (!record) {
@@ -197,7 +197,7 @@ export async function sealAndPost(session: RelaySessionLike, host: Host, w: Loca
     saveSeal(record);
   }
   if (!record.cardPosted) {
-    await postCard(session, w, record);
+    await postCard(session, w, record, agentName);
     record = { ...record, cardPosted: true };
     saveSeal(record);
   }
@@ -223,7 +223,7 @@ export function watchAgentTurns(ctx: Context): () => void {
       if (loadSeals().some((s) => s.key === key && s.cardPosted)) continue;
       inflight.add(key);
       console.warn('[vault] sealing turn', w.agent, w.messageId.slice(0, 8));
-      sealAndPost(session, ctx.host, w, live)
+      sealAndPost(session, ctx.host, w, live, (ctx as any).agents?.find?.(w.agent)?.name)
         .then((r) => console.warn('[vault] sealed turn', w.agent, r.pieceCid, r.dataSetId ?? ''))
         .catch((err) => {
           const chain: string[] = [];
