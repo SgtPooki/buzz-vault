@@ -122,7 +122,7 @@ describe('sealAndPost', () => {
     const r = await sealAndPost(session, {} as any, w2, live);
     expect(up).toHaveBeenCalledTimes(1);
     expect(reply).toHaveBeenCalledTimes(2);
-    expect(reply.mock.calls[1][1]).toBe(repId);
+    expect(reply.mock.calls[1][1]).toBe(reqId);
     expect(r.cardPosted).toBe(true);
     expect(JSON.parse(store[SEALS_KEY])).toHaveLength(1);
     up.mockRestore();

@@ -169,8 +169,8 @@ export function saveSeal(record: SealRecord) {
 
 async function postCard(session: RelaySessionLike, w: LocalWork, record: SealRecord) {
   const card = formatSealCard(record);
-  const root = w.thread ? w.threadRootId : w.publishedMessageIds?.[w.publishedMessageIds.length - 1];
-  if (root && HEX64.test(root)) await session.messages.reply(w.channelId, root, card);
+  // The host sets threadRootId to the request for channel work and to the thread root inside one
+  if (HEX64.test(w.threadRootId)) await session.messages.reply(w.channelId, w.threadRootId, card);
   else await session.messages.send(w.channelId, card);
 }
 
