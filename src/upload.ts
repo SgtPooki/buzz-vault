@@ -102,9 +102,7 @@ export function installHostFetchShim(host: Host, networkOrigins: readonly string
         headers['content-type'] ||
         headers['Content-Type'] ||
         'application/octet-stream';
-      const callId = `vault-fetch-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 9)}`;
+      const callId = crypto.randomUUID();
 
       const res = await host.sendBytesOnce(
         bytes,

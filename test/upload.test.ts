@@ -77,7 +77,7 @@ describe('upload module - fetch shim', () => {
         method: 'PUT',
         contentType: 'application/vnd.ipld.car',
       });
-      expect(sentBytesCalls[0].options.callId).toMatch(/^vault-fetch-\d+/);
+      expect(sentBytesCalls[0].options.callId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     } finally {
       uninstall();
     }
