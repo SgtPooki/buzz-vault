@@ -1,35 +1,32 @@
 import type { Context } from '@buzz/author';
 import type { CoverageManifest } from './export.js';
-import type { VaultReceiptData } from './upload.js';
+import type { RealUploadResult } from './upload.js';
 
 export interface PostReceiptOptions {
   channelId: string;
   coverage: CoverageManifest;
-  receiptData: VaultReceiptData;
+  rootCid: string;
+  upload: RealUploadResult;
 }
 
-export function formatReceiptMessage(options: PostReceiptOptions): string {
-  const { coverage, receiptData } = options;
-  const oldest = coverage.oldestCreatedAt
-    ? new Date(coverage.oldestCreatedAt * 1000).toISOString().split('T')[0]
-    : 'start';
-  const newest = coverage.newestCreatedAt
-    ? new Date(coverage.newestCreatedAt * 1000).toISOString().split('T')[0]
-    : 'now';
-  const spLines = receiptData.providers.length
-    ? receiptData.providers.map((sp) => `  - \`${sp}\``).join('\n')
-    : '  - Endorsed Calibration SPs';
+const day = (secs: number | null, fallback: string): string =>
+  secs ? new Date(secs * 1000).toISOString().split('T')[0] : fallback;
 
+// Formats a verified receipt from real upload results
+export function formatReceiptMessage(options: PostReceiptOptions): string {
+  const { coverage, rootCid, upload } = options;
+  const providers = upload.providers.map((p) => `  - Provider ${p}`).join('\n');
   return [
     '🔒 **Buzz Vault: Channel Archive Saved to Filecoin**',
     '',
-    `• **Piece CID:** \`${receiptData.pieceCid}\``,
-    `• **Root CID:** \`${receiptData.rootCid}\``,
-    `• **Coverage:** ${coverage.eventCount} messages (${oldest} to ${newest}), ${coverage.attachmentCount} attachments`,
-    '• **Providers (2 copies):**',
-    spLines,
-    '• **PDP Proof Status:** Verified on Calibration',
-    receiptData.retrievalUrls?.[0] ? `• **Retrieval:** [Download Archive](${receiptData.retrievalUrls[0]})` : '',
+    `• **Piece CID:** \`${upload.pieceCid}\``,
+    `• **Root CID:** \`${upload.rootCid ?? rootCid}\``,
+    upload.dataSetId ? `• **Data Set ID:** ${upload.dataSetId}` : '',
+    upload.txHash ? `• **Transaction Hash:** \`${upload.txHash}\`` : '',
+    `• **Coverage:** ${coverage.eventCount} messages (${day(coverage.oldestCreatedAt, 'start')} to ${day(coverage.newestCreatedAt, 'now')}), ${coverage.attachmentCount} attachments`,
+    providers ? `• **Providers (${upload.providers.length} copies):**\n${providers}` : '',
+    `• **PDP Proof Status:** ${upload.proofStatus ?? 'upload accepted, proving pending'}`,
+    upload.retrievalUrls && upload.retrievalUrls[0] ? `• **Retrieval:** ${upload.retrievalUrls[0]}` : '',
     '',
     '_Encrypted with local community key. Independent decryption verifiable outside Buzz._',
   ]
@@ -42,6 +39,5 @@ export async function postReceipt(ctx: Context, options: PostReceiptOptions): Pr
   if (!session?.messages?.send) {
     throw new Error('Relay messaging session is not available');
   }
-  const content = formatReceiptMessage(options);
-  return session.messages.send(options.channelId, content);
+  return session.messages.send(options.channelId, formatReceiptMessage(options));
 }

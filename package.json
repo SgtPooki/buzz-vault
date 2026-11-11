@@ -2,6 +2,7 @@
   "devDependencies": {
     "@buzz/author": "file:vendor/buzz-author-0.0.0-preview.1.tgz",
     "@types/react": "19.2.18",
+    "tsx": "^4.23.15",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "^3.2.7"

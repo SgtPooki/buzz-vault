@@ -51,14 +51,14 @@ export interface CoverageManifest {
 }
 
 export interface SessionPageResult {
-  events: readonly NostrEvent[];
+  events: readonly any[];
   relayCount?: number;
 }
 
 export interface SessionReader {
   readPage(
-    filters: readonly Record<string, unknown>[],
-    settings?: Record<string, unknown>
+    filters: readonly any[],
+    settings?: any
   ): Promise<SessionPageResult>;
 }
 
@@ -356,7 +356,17 @@ export async function fetchChannelEvents(
     let addedCount = 0;
     let oldestInPage: NostrEvent | null = null;
 
-    for (const event of events) {
+    for (const rawEvent of events) {
+      const event: NostrEvent = {
+        id: String(rawEvent.id),
+        pubkey: String(rawEvent.pubkey),
+        created_at: Number(rawEvent.created_at),
+        kind: Number(rawEvent.kind),
+        tags: rawEvent.tags ?? [],
+        content: String(rawEvent.content ?? ''),
+        sig: String(rawEvent.sig ?? ''),
+        ...(typeof rawEvent === 'object' ? rawEvent : {}),
+      };
       if (!seenIds.has(event.id)) {
         seenIds.add(event.id);
         allEvents.push(event);

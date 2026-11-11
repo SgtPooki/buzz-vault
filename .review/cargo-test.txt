@@ -1,0 +1,165 @@
+   Compiling buzzodz-plugins v0.1.0 (/private/tmp/claude-501/-Users-sgtpooki-code-work-filoz/7ed58c8f-0fd3-42ea-ac6b-7c54e5ef3468/scratchpad/buzz-app/crates/plugin-manager)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.79s
+     Running unittests src/lib.rs (target/debug/deps/buzzodz_plugins-2697ad1b5ba89c12)
+
+running 84 tests
+test access::tests::empty_build_input_has_no_default_rules ... ok
+test access::tests::build_rules_are_marked_built_in ... ok
+test access::tests::caps_rules ... ok
+test access::tests::parses_every_field_and_defaults ... ok
+test access::tests::rejects_unusable_files_as_a_whole ... ok
+test access::tests::env_override_must_be_absolute ... ok
+test access::tests::each_invalid_field_drops_only_its_rule ... ok
+test access::tests::describes_a_matched_rule_and_a_socket_error ... ok
+test imports::tests::accepts_explicit_transports_and_github_shorthand_only ... ok
+test access::tests::describes_the_file_rules_and_a_url ... ok
+test access::tests::built_in_selection_is_limited_to_its_prefix ... ok
+test access::tests::agent_may_be_absent_but_must_be_a_socket_when_present ... ok
+test access::tests::file_rules_rewrite_other_hosts_and_shadow_built_ins ... ok
+test access::tests::socketless_rules_need_an_inherited_agent ... ok
+test access::tests::load_orders_file_rules_before_built_ins_and_falls_back_to_them ... ok
+test access::tests::built_in_reads_https_over_ssh ... ok
+test access::tests::ssh_only_file_rule_shadows_the_built_in_https_rewrite ... ok
+test imports::tests::dropped_folder_does_not_fall_back_from_an_incomplete_signed_pair ... ok
+test imports::tests::dropped_folder_rejects_escaping_duplicate_and_oversized_inputs ... ok
+test imports::tests::folder_never_follows_symlinks_or_reads_special_files ... ok
+test imports::tests::access_rule_socket_reaches_git ... ok
+test imports::tests::dropped_assets_reject_invalid_encodings_and_enforce_asset_limits ... ok
+test imports::tests::git_deadline_and_output_limits_fail ... ok
+test imports::tests::dropped_folder_uses_reviewed_snapshot_without_a_temporary_reload_source ... ok
+test imports::tests::https_credential_failures_suggest_ssh ... ok
+test imports::tests::only_pinned_imports_record_the_installed_commit ... ok
+test imports::tests::dropped_assets_match_folder_package_and_survive_install ... ok
+test imports::tests::authorization_reaches_only_its_repository_and_never_follows_a_redirect ... ok
+test imports::tests::folder_skips_hidden_descendants_but_accepts_a_hidden_selection ... ok
+test imports::tests::rejects_malformed_authorization_before_running_git ... ok
+test imports::tests::required_commits_are_validated_before_any_git_work ... ok
+test imports::tests::folder_identity_is_lossless_and_capability_rejects_replaced_ancestors ... ok
+test imports::tests::git_sources_record_the_installed_commit_and_still_read_without_one ... ok
+test imports::tests::folder_discovers_nested_dist_and_installs_exact_preview_without_execution ... ok
+test imports::tests::signed_pair_never_falls_back_to_unsigned_files ... ok
+test imports::tests::saved_folder_checks_report_build_errors_and_do_not_substitute_siblings ... ok
+test imports::tests::saved_folder_checks_preserve_install_and_other_previews ... ok
+test imports::tests::remembered_sources_follow_revision_updates_rollback_and_reopen ... ok
+test imports::tests::signed_update_cannot_roll_back_to_unsigned_revision ... ok
+test imports::tests::url_artifacts_install_only_at_their_pinned_hash ... ok
+test managed::tests::compares_hosts_without_case_and_keeps_schemes_apart ... ok
+test managed::tests::ignores_invalid_entries_and_reports_each ... ok
+test managed::tests::compares_each_entry_with_the_installed_source ... ok
+test managed::tests::locates_the_file_beside_profiles_unless_overridden ... ok
+test managed::tests::never_blocks_on_special_files_and_follows_symlinks ... ok
+test managed::tests::parses_a_valid_policy_and_normalizes_entries ... ok
+test managed::tests::parses_url_entries_and_rejects_unpinned_or_unsafe_ones ... ok
+test managed::tests::keeps_the_first_duplicate_and_bounds_the_list ... ok
+test managed::tests::rejects_paths_that_could_never_match_a_candidate ... ok
+test managed::tests::rejects_references_git_would_refuse ... ok
+test managed::tests::rejects_unusable_files_as_a_whole ... ok
+test managed::tests::reads_absent_invalid_and_oversized_files_without_failing ... ok
+test managed::tests::source_must_be_plainly_displayable ... ok
+test managed::tests::url_entries_are_current_by_revision ... ok
+test managed::tests::serializes_for_the_frontend ... ok
+test tests::apps_deploy_to_the_sign_in_tenant_only ... ok
+test imports::tests::rejects_invalid_artifacts_and_bounds_preview_size ... ok
+test tests::discovery_tags_accept_readable_text_and_preserve_display_spelling ... ok
+test imports::tests::failed_reads_name_the_access_rule ... ok
+test tests::agents_migrates_its_switch_and_ignores_v1s ... ok
+test tests::host_grants_follow_enabled_bundled_manifest ... ok
+test imports::tests::signed_folder_import_load_reload_and_publisher_continuity ... ok
+test tests::legacy_manifest_and_code_artifacts_remain_compatible ... ok
+test tests::huddles_are_available_on_desktop_and_can_be_disabled ... ok
+test tests::native_catalog_matches_desktop_bundles ... ok
+test tests::prebuilt_artifacts_cannot_claim_built_in_conversation_ids ... ok
+test tests::release_requires_valid_event_and_exact_artifact_bytes ... ok
+test tests::host_grants_follow_enabled_current_artifact ... ok
+test tests::optional_plugins_default_off_and_preserve_explicit_overrides ... ok
+test tests::reload_source_paths_keep_spaces_and_reject_escapes ... ok
+test imports::tests::folder_and_git_optional_assets_require_exact_names_and_regular_files ... ok
+test tests::formerly_installed_agent_plugins_upgrade_to_the_bundled_copy ... ok
+test tests::reload_rejects_changed_host_grants_before_enable ... ok
+test tests::validates_agent_type_grants ... ok
+test tests::validates_discovery_metadata_and_old_manifests ... ok
+test tests::validates_host_declarations_and_old_manifests ... ok
+test tests::reload_rejects_enable_between_disk_read_and_commit ... ok
+test tests::saved_human_identity_signs_importable_release_without_storage_fallback ... ok
+test tests::compressed_png_profile_is_bounded_before_header_decode ... ok
+test tests::update_check_choices_survive_reinstall_update_rollback_and_restart ... ok
+test imports::tests::source_parent_and_matching_build_are_one_discovery_across_import_sources ... ok
+test imports::tests::git_reads_committed_blobs_without_checkout_filters_symlinks_or_scripts ... ok
+test imports::tests::timeout_terminates_spawned_descendant_before_it_can_write ... ok
+test imports::tests::pins_match_full_object_ids_of_either_hash_length ... ok
+
+test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.51s
+
+     Running unittests src/main.rs (target/debug/deps/buzzodz-a334887851ba7fde)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/build_config.rs (target/debug/deps/build_config-7e265b3829d69e44)
+
+running 18 tests
+test build_config::federated_identity_config::tests::relay_wire_authority_and_audience_are_canonical ... ok
+test build_config::federated_identity_config::tests::the_documented_staging_descriptor_is_valid ... ok
+test build_config::federated_identity_config::tests::sign_in_policy_is_optional_and_outside_the_session_identity ... ok
+test build_config::federated_identity_config::tests::a_build_without_configuration_trusts_the_built_in_server ... ok
+test build_config::federated_identity_config::tests::deployment_prefix_and_exact_one_label_routing ... ok
+test build_config::federated_identity_config::tests::unsafe_descriptors_are_refused_before_any_credential_use ... ok
+test build_config::federated_identity_config::tests::an_empty_value_or_another_builderlab_opts_out ... ok
+test build_config::federated_identity_config::tests::an_internal_build_adds_its_server_before_the_built_in_one ... ok
+test build_config::tests::repository_access_build_input_must_be_fully_usable ... ok
+test build_config::federated_identity_config::tests::shared_fixtures_match_the_front_end ... ok
+test build_config::tests::invalid_configuration_fails_without_echoing_its_contents ... ok
+test build_config::tests::defaults_to_production_unless_explicitly_disabled ... ok
+test build_config::tests::exact_apps_domain_uses_trusted_build_input_and_public_default ... ok
+test build_config::tests::local_url_and_process_overrides_produce_an_exact_origin_and_api_path ... ok
+test build_config::tests::pinned_viewer_turns_off_nip_fi_only_in_tauri_dev ... ok
+test build_config::tests::apps_control_plane_build_input_is_an_https_origin ... ok
+test build_config::tests::unrelated_syntax_is_ignored_without_promoting_multiline_contents ... ok
+test build_config::federated_identity_config::tests::a_community_has_at_most_one_server ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/management.rs (target/debug/deps/management-2c0c2513cc837f63)
+
+running 31 tests
+test built_in_conversation_features_are_absent_even_with_old_disabled_flags ... ok
+test channels_is_required_even_with_saved_disabled_settings ... ok
+test corrupt_settings_require_recovery_and_are_backed_up ... ok
+test feedback_is_in_native_catalog ... ok
+test failed_default_snapshot_does_not_block_untouched_upgrades ... ok
+test corrupt_artifact_does_not_block_disable_or_remove ... ok
+test accepting_reload_permissions_does_not_accept_a_different_publisher ... ok
+test bundled_defaults_are_pinned_for_fresh_and_untouched_existing_profiles ... ok
+test both_signed_icon_formats_survive_reload_restart_and_rollback ... ok
+test invalid_install_preserves_working_revision ... ok
+test folder_reload_updates_current_revision_and_preserves_disabled_state ... ok
+test legacy_plugin_settings_preserve_choices_while_missing_flags_keep_old_defaults ... ok
+test install_enable_update_rollback_and_remove_survive_restart ... ok
+test managed_policy_lives_beside_profiles_and_never_installs ... ok
+test live_reload_preserves_enabled_state_and_rejects_stale_module_reads ... ok
+test jpeg_only_packages_validate_type_decode_and_resource_bounds ... ok
+test management_never_executes_code_and_protects_bundled_identity ... ok
+test package_assets_are_optional_and_reject_invalid_boundaries ... ok
+test bundled_plugins_have_independent_flags_and_all_ids_are_reserved ... ok
+test readme_and_icon_are_versioned_read_on_demand_and_preserved_by_rollback ... ok
+test registry_cannot_restore_plugins_with_built_in_conversation_ids ... ok
+test reload_rejects_invalid_sources_without_changing_revision ... ok
+test reload_rejects_replaced_source_folder_symlink ... ok
+test safe_mode_and_profiles_are_independent ... ok
+test signed_asset_updates_keep_publisher_and_detect_tampering ... ok
+test rollback_restores_reload_source_and_same_byte_reload_refreshes_source ... ok
+test folder_reload_compares_effective_output_limits ... ok
+test reload_rejects_nonconforming_reserved_asset_until_source_migrates ... ok
+test reload_reads_the_exact_recorded_folder_name ... ok
+test bundled_defaults_preserve_saved_choices_and_only_channels_is_required ... ok
+test concurrent_changes_do_not_lose_installs ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.58s
+
+   Doc-tests buzzodz_plugins
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,7 +1,7 @@
-import type { AddedTool, BuzzClient, AddedToolContext, AddedToolReply, Host, Context } from '@buzz/author';
+import type { AddedTool, BuzzClient, AddedToolContext, AddedToolReply, Host } from '@buzz/author';
 import { exportChannel } from './export.js';
 import { encryptCar, hexToBytes } from './encrypt.js';
-import { uploadArchiveToProviders } from './upload.js';
+import { uploadArchiveWithSynapse } from './upload.js';
 import { formatReceiptMessage } from './receipt.js';
 import { loadSession } from './connect.js';
 
@@ -71,37 +71,34 @@ export function createVaultArchiveTool(host?: Host): AddedTool {
         attachments,
       });
 
-      const keyHex = (args?.encryptionKeyHex as string) || loadSession()?.sessionPrivateKey;
+      const session = loadSession();
+      const keyHex = (args?.encryptionKeyHex as string) || session?.sessionPrivateKey;
       if (!keyHex) {
-        throw new Error('No encryption key or active Filecoin session found. Connect Filecoin in Settings first.');
+        throw new Error('No encryption key or active Filecoin session found. Connect or import session in Settings first.');
       }
 
       const keyBytes = hexToBytes(keyHex);
       const encryptResult = await encryptCar(exportResult.carBytes, keyBytes);
 
-      let pieceCid = 'bafk2bzaceunknown';
-      let providers = ['f01234', 'f05678'];
-
-      if (host) {
-        const uploadRes = await uploadArchiveToProviders(
-          { host } as Context,
-          encryptResult.encryptedBytes,
-          { rootCid: exportResult.rootCid }
-        );
-        pieceCid = uploadRes.pieceCid;
-        providers = uploadRes.providers;
+      if (!host) {
+        throw new Error('Host service is not available for upload');
       }
+      if (!session) {
+        throw new Error('No active Filecoin session found. Paste or connect session in Settings first.');
+      }
+
+      const uploadResult = await uploadArchiveWithSynapse(encryptResult.encryptedBytes, {
+        host,
+        sessionPrivateKey: session.sessionPrivateKey,
+        ownerAddress: session.ownerAddress,
+        copies: 2,
+      });
 
       const receiptContent = formatReceiptMessage({
         channelId,
         coverage: exportResult.coverage,
-        receiptData: {
-          pieceCid,
-          rootCid: exportResult.rootCid,
-          providers,
-          retrievalUrls: providers.map((sp) => `${sp.replace(/\/+$/, '')}/piece/${pieceCid}`),
-          timestamp: Date.now(),
-        },
+        rootCid: exportResult.rootCid,
+        upload: uploadResult,
       });
 
       await client.publish({
@@ -110,7 +107,7 @@ export function createVaultArchiveTool(host?: Host): AddedTool {
         tags: [['h', channelId]],
       });
 
-      return `Channel ${channelId} successfully archived to Filecoin!\nPiece CID: ${pieceCid}\nEvents: ${exportResult.coverage.eventCount}\nAttachments: ${exportResult.coverage.attachmentCount}\nReceipt posted to channel.`;
+      return `Channel ${channelId} successfully archived to Filecoin!\nPiece CID: ${uploadResult.pieceCid}\nData Set ID: ${uploadResult.dataSetId ?? 'pending'}\nEvents: ${exportResult.coverage.eventCount}\nAttachments: ${exportResult.coverage.attachmentCount}\nReceipt posted to channel.`;
     },
   };
 }

@@ -3,9 +3,7 @@ import {
   loadSession,
   saveSession,
   clearSession,
-  generateSessionKeypair,
-  buildAuthorizeUrl,
-  watchAuthorization,
+  parseSessionEnv,
   type VaultSession,
 } from '../connect.js';
 
@@ -14,55 +12,28 @@ export function createSettingsCardComponent(ctx: Context) {
 
   return function VaultSettingsCard() {
     const [session, setSession] = React.useState<VaultSession | null>(() => loadSession());
-    const [authorizing, setAuthorizing] = React.useState(false);
-    const [authUrl, setAuthUrl] = React.useState<string | null>(null);
+    const [pastedEnv, setPastedEnv] = React.useState('');
     const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
 
-    const handleConnect = async () => {
+    const handleImportSession = () => {
       try {
-        setAuthorizing(true);
-        setStatusMessage('Generating device-local session key...');
-        const kp = generateSessionKeypair();
-        const url = buildAuthorizeUrl(kp.address);
-        setAuthUrl(url);
-        setStatusMessage('Authorize in Filecoin Console, then return here...');
-
-        const result = await watchAuthorization({
-          sessionAddress: kp.address,
-          onProgress: (ev) => {
-            if (ev.type === 'watch:tick') {
-              setStatusMessage(`Waiting for authorization (${Math.round(ev.data.remainingMs / 1000)}s)...`);
-            }
-          },
-        });
-
-        if (result.status === 'granted' && result.owner) {
-          const newSession: VaultSession = {
-            sessionPrivateKey: kp.privateKey,
-            sessionAddress: kp.address,
-            ownerAddress: result.owner,
-            expiry: Number(result.expiry ?? 0n),
-            network: 'calibration',
-          };
-          saveSession(newSession);
-          setSession(newSession);
-          setAuthorizing(false);
-          setAuthUrl(null);
-          setStatusMessage(null);
-        } else {
-          setStatusMessage('Authorization timed out or was not granted.');
-          setAuthorizing(false);
+        if (!pastedEnv.trim()) {
+          setStatusMessage('Please paste the contents of session.env');
+          return;
         }
+        const imported = parseSessionEnv(pastedEnv);
+        saveSession(imported);
+        setSession(imported);
+        setPastedEnv('');
+        setStatusMessage('Successfully imported session.env (device-local).');
       } catch (err: any) {
-        setStatusMessage(`Error: ${err?.message || String(err)}`);
-        setAuthorizing(false);
+        setStatusMessage(`Import error: ${err?.message || String(err)}`);
       }
     };
 
     const handleDisconnect = () => {
       clearSession();
       setSession(null);
-      setAuthUrl(null);
       setStatusMessage(null);
     };
 
@@ -70,7 +41,7 @@ export function createSettingsCardComponent(ctx: Context) {
       if (!session) return;
       const json = JSON.stringify(session, null, 2);
       navigator.clipboard.writeText(json);
-      alert('Session key details copied to clipboard!');
+      alert('Session details copied to clipboard!');
     };
 
     return (
@@ -132,58 +103,52 @@ export function createSettingsCardComponent(ctx: Context) {
           </div>
         ) : (
           <div style={{ background: '#1e293b', padding: '16px', borderRadius: '8px' }}>
-            <p style={{ fontSize: '14px', marginBottom: '16px' }}>
-              Connect a Filecoin session key to enable channel archiving.
+            <h4 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 8px 0' }}>Import Calibration Session</h4>
+            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '12px' }}>
+              Paste the contents of your <code>session.env</code> file below. Only <code>SESSION_KEY</code>, <code>WALLET_ADDRESS</code>, and <code>NETWORK</code> are parsed and stored device-locally in localStorage.
             </p>
 
-            {authorizing && authUrl ? (
-              <div style={{ marginBottom: '16px' }}>
-                <a
-                  href={authUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'inline-block',
-                    background: '#2563eb',
-                    color: '#fff',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    textDecoration: 'none',
-                    fontWeight: 500,
-                    fontSize: '14px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Open Filecoin Console to Authorize ↗
-                </a>
-                {statusMessage && (
-                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>{statusMessage}</div>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleConnect}
-                style={{
-                  background: '#2563eb',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  fontWeight: 500,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
-              >
-                Generate Session Key & Connect
-              </button>
-            )}
+            <textarea
+              rows={5}
+              value={pastedEnv}
+              onChange={(e) => setPastedEnv(e.target.value)}
+              placeholder="Paste session.env contents here...&#10;SESSION_KEY=0x...&#10;WALLET_ADDRESS=0x...&#10;NETWORK=calibration"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                background: '#0f172a',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                padding: '8px',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                marginBottom: '12px',
+              }}
+            />
 
-            {statusMessage && !authorizing && (
-              <div style={{ marginTop: '12px', fontSize: '13px', color: '#ef4444' }}>
-                {statusMessage}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleImportSession}
+              style={{
+                background: '#2563eb',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              Import Session
+            </button>
+          </div>
+        )}
+
+        {statusMessage && (
+          <div style={{ marginTop: '12px', fontSize: '13px', color: statusMessage.includes('error') ? '#ef4444' : '#38bdf8' }}>
+            {statusMessage}
           </div>
         )}
       </div>

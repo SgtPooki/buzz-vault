@@ -1,9 +1,9 @@
-import { writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from 'viem';
 import { exportChannel } from '../src/export.js';
-import { encryptCar, generateEncryptionKey, bytesToHex } from '../src/encrypt.js';
+import { encryptCar, decryptCar, generateEncryptionKey, bytesToHex } from '../src/encrypt.js';
 import { unpackAndVerifyCar } from './decryptor.js';
 
 function createSignedEvent(privKeyHex: string, kind: number, content: string, tags: string[][], createdAt: number) {
@@ -48,8 +48,13 @@ async function runRecoveryDrill() {
   await writeFile(resolve(artifactDir, 'channel-archive.car.enc'), encryptedBytes);
   console.log(`   Wrote test artifact to ${artifactDir}/channel-archive.car.enc`);
 
-  console.log('\n3. Executing independent standalone recovery outside Buzz...');
-  const { report, events, attachments } = await unpackAndVerifyCar(carBytes);
+  console.log('\n3. Reading encrypted artifact from disk and decrypting...');
+  const diskBytes = await readFile(resolve(artifactDir, 'channel-archive.car.enc'));
+  const decryptedCar = await decryptCar(diskBytes, encryptionKey);
+  console.log(`   Decrypted CAR size: ${decryptedCar.byteLength} bytes.`);
+
+  console.log('\n4. Executing independent standalone recovery outside Buzz...');
+  const { report, events, attachments } = await unpackAndVerifyCar(decryptedCar);
 
   console.log('\n--- DRILL VERIFICATION REPORT ---');
   console.log(`Channel ID:          ${report.channelId}`);

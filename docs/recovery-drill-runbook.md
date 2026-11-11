@@ -1,9 +1,11 @@
 # Buzz Vault — Recovery Drill Runbook
 
 ## 1. Overview
-Buzz Vault creates encrypted, provable channel archives of Buzz community channels (signed Nostr kind 9 events plus media attachments) stored across endorsed Filecoin Onchain Cloud storage providers (SPs) on Calibration testnet.
+Buzz Vault creates encrypted, provable channel archives of Buzz community channels (signed Nostr kind 9 events plus media attachments) designed for storage across endorsed Filecoin Onchain Cloud storage providers (SPs) on Calibration testnet.
 
 A core promise of Buzz Vault is **independent recoverability**: even if the Buzz desktop client, local profile, or relay servers are completely offline or unavailable, a community owner can take their encrypted archive file, their device-local key, and open/verify everything outside Buzz.
+
+> **Status:** Local verification drill only; no real upload yet. Live Calibration upload verification is pending execution with active session credentials.
 
 ---
 
@@ -49,9 +51,9 @@ npx tsx tools/decryptor.ts ./recovery-artifacts/channel-archive.car.enc 0123...c
 
 ---
 
-## 4. Verification Drill Results
+## 4. Local Verification Drill Results
 
-A live test run of the recovery drill was executed with simulated community events and image attachments:
+A test run of the local recovery drill was executed with simulated community events and image attachments (local verification drill only; no real upload yet):
 
 ```text
 === BUZZ VAULT RECOVERY DRILL ===
@@ -61,7 +63,10 @@ A live test run of the recovery drill was executed with simulated community even
 2. Encrypting CAR with filecoin-encryption-envelope (AES-256-GCM)...
    Encrypted size: 1,482 bytes.
    Local key: 32-byte AES-GCM CEK.
-3. Executing independent standalone recovery outside Buzz...
+   Wrote test artifact to recovery-artifacts/channel-archive.car.enc
+3. Reading encrypted artifact from disk and decrypting...
+   Decrypted CAR size: 1,438 bytes.
+4. Executing independent standalone recovery outside Buzz...
 
 --- DRILL VERIFICATION REPORT ---
 Channel ID:          ch_announcements

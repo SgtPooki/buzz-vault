@@ -155,7 +155,7 @@
   <div class="container">
     <header>
       <h1>🔒 Buzz Vault <span class="badge">Standalone Decryptor</span></h1>
-      <p>Independent off-site channel recovery and cryptographic verification without Buzz.</p>
+      <p>renders without verifying signatures; loads two libraries from esm.sh</p>
     </header>
 
     <div class="card">
@@ -167,11 +167,11 @@
         <label for="encKey">Hex Encryption Key</label>
         <input type="text" id="encKey" placeholder="Paste 64-character hex symmetric key (e.g. 7f3a8b...)">
       </div>
-      <button id="decryptBtn" onclick="runRecovery()">Decrypt & Verify Archive</button>
+      <button id="decryptBtn" onclick="runRecovery()">Decrypt & Render Archive</button>
     </div>
 
     <div id="resultsCard" class="card" style="display: none;">
-      <h2 style="color: var(--text-bright); font-size: 18px; margin-top: 0;">Verification Summary</h2>
+      <h2 style="color: var(--text-bright); font-size: 18px; margin-top: 0;">Archive Summary</h2>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-val" id="resChannel">—</div>
@@ -179,15 +179,11 @@
         </div>
         <div class="stat-card">
           <div class="stat-val" id="resEvents">0</div>
-          <div class="stat-label">Events (All Verified)</div>
+          <div class="stat-label">Events</div>
         </div>
         <div class="stat-card">
           <div class="stat-val" id="resAttachments">0</div>
-          <div class="stat-label">Attachments (SHA-256 Valid)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-val" id="resProof"><span class="status-tag status-valid">VERIFIED</span></div>
-          <div class="stat-label">Cryptographic Status</div>
+          <div class="stat-label">Attachments</div>
         </div>
       </div>
 

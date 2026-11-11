@@ -1,8 +1,8 @@
 import type { ChannelLauncherProps, ChannelPanelContext, Context } from '@buzz/author';
 import { loadSession, type VaultSession } from '../connect.js';
-import { exportChannel } from '../export.js';
+import { exportChannel, fetchChannelEvents, type NostrEvent } from '../export.js';
 import { encryptCar, hexToBytes } from '../encrypt.js';
-import { uploadArchiveToProviders } from '../upload.js';
+import { uploadArchiveWithSynapse, type RealUploadResult } from '../upload.js';
 import { postReceipt } from '../receipt.js';
 
 export interface VaultPanelProps {
@@ -50,9 +50,12 @@ export function createVaultPanelComponent(ctx: Context) {
     const [archiveResult, setArchiveResult] = React.useState<{
       pieceCid: string;
       rootCid: string;
+      dataSetId?: string;
+      txHash?: string;
       eventCount: number;
       attachmentCount: number;
       providers: string[];
+      retrievalUrls: string[];
     } | null>(null);
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
@@ -61,66 +64,71 @@ export function createVaultPanelComponent(ctx: Context) {
 
     const handleArchive = async () => {
       if (!session) {
-        setErrorMessage('No active Filecoin session. Connect in Settings first.');
+        setErrorMessage('No active Filecoin session. Connect or import in Settings first.');
         return;
       }
+      if (!ctx.host) {
+        setErrorMessage('Host service is not available.');
+        return;
+      }
+
       try {
         setArchiving(true);
         setErrorMessage(null);
         setArchiveResult(null);
 
-        // Step 1: Exporting channel
-        setStep('Fetching channel events and attachments...');
+        // Step 1: Fetch channel events from relay session
+        setStep('Fetching channel events from relay...');
+        const relaySession = ctx.relay?.snapshot?.()?.session;
+        let events: NostrEvent[] = [];
+        if (relaySession) {
+          events = await fetchChannelEvents(relaySession, channelId);
+        }
+
+        // Step 2: Build CAR
+        setStep('Packing events and manifest into UnixFS CAR...');
         const exportRes = await exportChannel({
           channelId,
-          events: [], // Export collects current page or seeded events
+          events,
           attachments: [],
         });
 
-        // Step 2: Encrypting
-        setStep('Encrypting archive locally with session key...');
+        // Step 3: Encrypt CAR
+        setStep('Encrypting archive locally with session key (AES-256-GCM)...');
         const keyBytes = hexToBytes(session.sessionPrivateKey);
         const encryptRes = await encryptCar(exportRes.carBytes, keyBytes);
 
-        // Step 3: Uploading to Calibnet
-        setStep('Uploading 2 copies to endorsed Filecoin SPs...');
-        let providers = ['https://calibration.filozone.com/pdp', 'https://sp-calibration.filcloud.io/pdp'];
-        let pieceCid = 'bafkzcibdemo';
+        // Step 4: Upload via Synapse SDK through host fetch shim
+        setStep('Uploading to Filecoin Calibration storage providers...');
+        const uploadRes = await uploadArchiveWithSynapse(encryptRes.encryptedBytes, {
+          host: ctx.host,
+          sessionPrivateKey: session.sessionPrivateKey,
+          ownerAddress: session.ownerAddress,
+          copies: 2,
+        });
 
-        if (ctx.host) {
-          const uploadRes = await uploadArchiveToProviders(
-            ctx,
-            encryptRes.encryptedBytes,
-            { rootCid: exportRes.rootCid }
-          );
-          pieceCid = uploadRes.pieceCid;
-          providers = uploadRes.providers;
-        }
-
-        // Step 4: Post receipt
+        // Step 5: Post verifiable receipt to channel
         setStep('Posting verified proof receipt to channel...');
         try {
           await postReceipt(ctx, {
             channelId,
             coverage: exportRes.coverage,
-            receiptData: {
-              pieceCid,
-              rootCid: exportRes.rootCid,
-              providers,
-              retrievalUrls: providers.map((sp) => `${sp.replace(/\/+$/, '')}/piece/${pieceCid}`),
-              timestamp: Date.now(),
-            },
+            rootCid: exportRes.rootCid,
+            upload: uploadRes,
           });
         } catch {
-          // Receipt posting best-effort
+          // Receipt posting is best-effort
         }
 
         setArchiveResult({
-          pieceCid,
+          pieceCid: uploadRes.pieceCid,
           rootCid: exportRes.rootCid,
+          dataSetId: uploadRes.dataSetId,
+          txHash: uploadRes.txHash,
           eventCount: exportRes.coverage.eventCount,
           attachmentCount: exportRes.coverage.attachmentCount,
-          providers,
+          providers: uploadRes.providers,
+          retrievalUrls: uploadRes.retrievalUrls,
         });
         setStep('done');
       } catch (err: any) {
@@ -138,10 +146,13 @@ export function createVaultPanelComponent(ctx: Context) {
           <span style={{ fontSize: '12px', color: '#94a3b8' }}>#{channelName}</span>
         </div>
 
-        <p style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '16px' }}>
-          Create an encrypted, self-contained snapshot of this channel on Filecoin Onchain Cloud.
-          The archive includes signed events and attachments and can be decrypted independently outside Buzz.
+        <p style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '12px' }}>
+          Create an encrypted snapshot of this channel on Filecoin Onchain Cloud.
         </p>
+
+        <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: '#94a3b8', marginBottom: '16px', lineHeight: 1.4 }}>
+          <strong>Capture Scope:</strong> The panel captures all channel events and attachment hashes. For full attachment binary preservation, use the <code>vault_archive</code> agent tool.
+        </div>
 
         {!session ? (
           <div style={{ background: '#1e293b', padding: '16px', borderRadius: '8px', fontSize: '13px' }}>
@@ -149,7 +160,7 @@ export function createVaultPanelComponent(ctx: Context) {
               Filecoin Calibration Not Connected
             </div>
             <div style={{ color: '#94a3b8', marginBottom: '12px' }}>
-              Connect a session key in Settings &gt; Storage &amp; Backup to enable archiving.
+              Paste your <code>session.env</code> in Settings &gt; Storage &amp; Backup to enable archiving.
             </div>
           </div>
         ) : (
@@ -197,17 +208,23 @@ export function createVaultPanelComponent(ctx: Context) {
         {archiveResult && (
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', padding: '16px', borderRadius: '8px', fontSize: '12px', lineHeight: 1.6 }}>
             <div style={{ color: '#22c55e', fontWeight: 700, fontSize: '13px', marginBottom: '8px' }}>
-              ✔ Archive Saved &amp; Verified
+              ✔ Archive Saved
             </div>
             <div><strong>Piece CID:</strong> <code style={{ color: '#38bdf8' }}>{archiveResult.pieceCid}</code></div>
             <div><strong>Root CID:</strong> <code style={{ color: '#94a3b8' }}>{archiveResult.rootCid}</code></div>
+            {archiveResult.dataSetId && <div><strong>Data Set ID:</strong> <code>{archiveResult.dataSetId}</code></div>}
+            {archiveResult.txHash && <div><strong>Transaction Hash:</strong> <code>{archiveResult.txHash}</code></div>}
             <div><strong>Saved:</strong> {archiveResult.eventCount} messages, {archiveResult.attachmentCount} attachments</div>
-            <div style={{ marginTop: '8px' }}><strong>Storage Providers (2 copies):</strong></div>
-            <ul style={{ margin: '4px 0 8px 16px', padding: 0 }}>
-              {archiveResult.providers.map((p, i) => (
-                <li key={i}><code>{p}</code></li>
-              ))}
-            </ul>
+            {archiveResult.providers.length > 0 && (
+              <>
+                <div style={{ marginTop: '8px' }}><strong>Storage Providers ({archiveResult.providers.length} copies):</strong></div>
+                <ul style={{ margin: '4px 0 8px 16px', padding: 0 }}>
+                  {archiveResult.providers.map((p, i) => (
+                    <li key={i}>Provider <code>{p}</code></li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #334155', color: '#cbd5e1' }}>
               <strong>Standalone Decryption Drill:</strong>

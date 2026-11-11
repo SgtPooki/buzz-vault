@@ -1,6 +1,38 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createVaultArchiveTool } from '../src/agent-tool.js';
 import { generateEncryptionKey, bytesToHex } from '../src/encrypt.js';
+import * as uploadMod from '../src/upload.js';
+import * as connectMod from '../src/connect.js';
+
+vi.mock('../src/connect.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof connectMod>();
+  return {
+    ...actual,
+    loadSession: vi.fn().mockReturnValue({
+      sessionPrivateKey: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      sessionAddress: '0x1111111111111111111111111111111111111111',
+      ownerAddress: '0x2222222222222222222222222222222222222222',
+      expiry: 1893456000,
+      network: 'calibration',
+    }),
+  };
+});
+
+vi.mock('../src/upload.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof uploadMod>();
+  return {
+    ...actual,
+    uploadArchiveWithSynapse: vi.fn().mockResolvedValue({
+      pieceCid: 'baga6ea4seaqrealtestpiececid',
+      rootCid: 'bafybeirootcidtest',
+      dataSetId: '10042',
+      txHash: '0x1234567890abcdef',
+      providers: ['12', '14'],
+      retrievalUrls: ['https://sp12.filcloud.io/pdp/piece/baga6ea4seaqrealtestpiececid'],
+      proofStatus: 'upload accepted, proving pending',
+    }),
+  };
+});
 
 describe('vault_archive agent tool', () => {
   it('has correct tool name and description schema', () => {
@@ -35,6 +67,7 @@ describe('vault_archive agent tool', () => {
     };
 
     const mockHost: any = {
+      request: vi.fn(),
       sendBytesOnce: vi.fn().mockResolvedValue({ status: 200, headers: {}, body: 'OK' }),
     };
 
@@ -44,9 +77,9 @@ describe('vault_archive agent tool', () => {
     expect(mockClient.query).toHaveBeenCalledWith([{ kinds: [9], '#h': ['ch-test'] }]);
     expect(mockClient.media).toHaveBeenCalledWith('https://example.com/blob.png');
     expect(mockClient.read).toHaveBeenCalledWith('/tmp/blob.png');
-    expect(mockHost.sendBytesOnce).toHaveBeenCalled();
     expect(publishedEvents).toHaveLength(1);
     expect(publishedEvents[0].content).toContain('Buzz Vault: Channel Archive Saved to Filecoin');
+    expect(publishedEvents[0].content).toContain('baga6ea4seaqrealtestpiececid');
     expect(reply).toContain('Channel ch-test successfully archived');
   });
 });

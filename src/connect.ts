@@ -14,6 +14,7 @@ import {
   type Client,
   createPublicClient,
   getAbiItem,
+  getAddress,
   type Hex,
   isAddressEqual,
   type Log,
@@ -412,3 +413,46 @@ export function clearSession(): void {
   if (!storage) return
   storage.removeItem(STORAGE_KEY)
 }
+
+// Parses dotenv-style session.env text into a VaultSession object
+export function parseSessionEnv(text: string): VaultSession {
+  const lines = text.split('\n')
+  const env: Record<string, string> = {}
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx !== -1) {
+      const k = trimmed.slice(0, eqIdx).trim().toUpperCase()
+      let v = trimmed.slice(eqIdx + 1).trim()
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1)
+      }
+      env[k] = v
+    }
+  }
+
+  const sessionKey = (env.SESSION_KEY || env.SESSIONKEY) as Hex
+  const walletAddress = (env.WALLET_ADDRESS || env.WALLETADDRESS || env.OWNER_ADDRESS || env.OWNER || env.ACCOUNT) as Address
+  const network = (env.NETWORK || 'calibration').toLowerCase()
+
+  if (!sessionKey) {
+    throw new Error('Missing SESSION_KEY in session.env')
+  }
+  if (!walletAddress) {
+    throw new Error('Missing WALLET_ADDRESS in session.env')
+  }
+  if (network !== 'calibration') {
+    throw new Error(`Expected NETWORK=calibration, got ${network}`)
+  }
+
+  const account = privateKeyToAccount(sessionKey)
+  return {
+    sessionPrivateKey: sessionKey,
+    sessionAddress: account.address,
+    ownerAddress: getAddress(walletAddress),
+    expiry: 0,
+    network: 'calibration',
+  }
+}
+

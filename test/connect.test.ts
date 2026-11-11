@@ -17,6 +17,7 @@ import {
   clearSession,
   generateSessionKeypair,
   loadSession,
+  parseSessionEnv,
   saveSession,
   STORAGE_KEY,
   watchAuthorization,
@@ -290,6 +291,35 @@ describe('connect module', () => {
 
       memory.set(STORAGE_KEY, JSON.stringify({ invalid: true }))
       expect(loadSession()).toBeNull()
+    })
+
+    it('parses session.env text and extracts correct credentials', () => {
+      const envText = `
+# Exported session
+SESSION_KEY="0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+WALLET_ADDRESS=0x44f08D1beFe61255b3C3A349C392C560FA333759
+NETWORK=calibration
+SCOPES=createDataSet,addPieces,encrypt
+      `
+      const parsed = parseSessionEnv(envText)
+      expect(parsed.sessionPrivateKey).toBe('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')
+      expect(parsed.ownerAddress).toBe('0x44f08D1beFe61255b3C3A349C392C560FA333759')
+      expect(parsed.network).toBe('calibration')
+      expect(parsed.sessionAddress).toBeDefined()
+    })
+
+    it('throws error when required fields are missing or network is invalid', () => {
+      expect(() => parseSessionEnv('NETWORK=calibration')).toThrow('Missing SESSION_KEY')
+      expect(() =>
+        parseSessionEnv(
+          'SESSION_KEY=0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nNETWORK=calibration'
+        )
+      ).toThrow('Missing WALLET_ADDRESS')
+      expect(() =>
+        parseSessionEnv(
+          'SESSION_KEY=0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nWALLET_ADDRESS=0x44f08D1beFe61255b3C3A349C392C560FA333759\nNETWORK=mainnet'
+        )
+      ).toThrow('Expected NETWORK=calibration')
     })
   })
 })
