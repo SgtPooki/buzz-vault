@@ -14,7 +14,8 @@
   "private": true,
   "scripts": {
     "build": "tsc && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:viewer": "vite build -c vite.viewer.config.ts"
   },
   "type": "module",
   "dependencies": {

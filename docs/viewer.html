@@ -26,72 +26,9 @@
   <div class="badge wait" id="badge">Fetching from the storage provider…</div>
   <div id="list"></div>
   <details><summary>How this page verifies</summary>
-    It downloads the CAR from the storage provider URLs carried in this link (the copies recorded at seal time), unpacks <code>events.ndjson</code> and <code>manifest.json</code>, recomputes each event id (NIP-01 sha256 over the canonical array) and checks the Schnorr signature against the author's key. It does not recompute the piece CID in the browser, so a provider could serve a different validly signed transcript; the vault_turn_get agent tool does check the piece CID. Libraries load from esm.sh: @ipld/car, @helia/unixfs, @noble/curves, @noble/hashes.
+    It downloads the CAR from the storage provider URLs carried in this link (the copies recorded at seal time), unpacks <code>events.ndjson</code> and <code>manifest.json</code>, recomputes each event id (NIP-01 sha256 over the canonical array) and checks the Schnorr signature against the author's key. It does not recompute the piece CID in the browser, so a provider could serve a different validly signed transcript; the vault_turn_get agent tool does check the piece CID. The verifier is bundled from the plugin source (src/viewer.ts), no CDN.
   </details>
 </main>
-<script type="module">
-import { CarReader } from 'https://esm.sh/@ipld/car@5';
-import { unixfs } from 'https://esm.sh/@helia/unixfs@7';
-import { schnorr } from 'https://esm.sh/@noble/curves@2/secp256k1';
-import { sha256 } from 'https://esm.sh/@noble/hashes@2/sha2';
-import { bytesToHex, hexToBytes, utf8ToBytes } from 'https://esm.sh/@noble/hashes@2/utils';
-
-const q = new URLSearchParams(location.search);
-const piece = q.get('piece');
-const sources = q.getAll('src').filter((u) => /^https:\/\//.test(u));
-const badge = document.getElementById('badge'), list = document.getElementById('list'), where = document.getElementById('where');
-where.textContent = piece ? `piece ${piece}` : 'no piece CID in the URL';
-
-const idOf = (e) => bytesToHex(sha256(utf8ToBytes(JSON.stringify([0, e.pubkey, e.created_at, e.kind, e.tags, e.content]))));
-function verify(e) {
-  const idMatches = idOf(e) === e.id;
-  let sig = false;
-  try { sig = idMatches && schnorr.verify(hexToBytes(e.sig), hexToBytes(e.id), hexToBytes(e.pubkey)); } catch {}
-  return idMatches && sig;
-}
-async function fetchCar() {
-  for (const src of sources) {
-    try { const r = await fetch(src); if (r.ok) return { bytes: new Uint8Array(await r.arrayBuffer()), src }; } catch {}
-  }
-  throw new Error(sources.length ? 'no storage provider answered' : 'no provider URL in the link');
-}
-async function unpack(bytes) {
-  const reader = await CarReader.fromBytes(bytes);
-  const [root] = await reader.getRoots();
-  const blocks = new Map();
-  for await (const b of reader.blocks()) blocks.set(b.cid.toString(), b.bytes);
-  const bs = { async *get(c) { yield blocks.get(c.toString()); }, async has(c) { return blocks.has(c.toString()); }, async put(c, b) { blocks.set(c.toString(), b); return c; } };
-  const fs = unixfs({ blockstore: bs });
-  const text = async (p) => { const cs = []; for await (const c of fs.cat(p)) cs.push(c); return new TextDecoder().decode(await new Blob(cs).arrayBuffer()); };
-  const out = { events: [], manifest: null };
-  if (!root) throw new Error('empty CAR');
-  for await (const e of fs.ls(root.toString())) {
-    if (e.name === 'events.ndjson') out.events = (await text(e.path)).split('\n').filter(Boolean).map((l) => JSON.parse(l));
-    if (e.name === 'manifest.json') out.manifest = JSON.parse(await text(e.path));
-  }
-  return out;
-}
-function render(events, manifest, src) {
-  const results = events.map((e) => ({ e, ok: verify(e) }));
-  const good = results.filter((r) => r.ok).length;
-  badge.className = 'badge ' + (good === results.length ? 'ok' : 'bad');
-  badge.textContent = good === results.length ? `✓ ${good} of ${results.length} signatures verified on this device` : `✗ ${results.length - good} of ${results.length} signatures failed`;
-  where.textContent = `${manifest?.agent ?? 'agent'} · ${manifest?.sealedAt ?? ''} · served by ${new URL(src).host}`;
-  for (const { e, ok } of results) {
-    const d = document.createElement('div'); d.className = 'msg';
-    d.innerHTML = `<div class="meta"><span>${new Date(e.created_at * 1000).toLocaleString()}</span><span><code>${e.pubkey.slice(0, 8)}…</code></span><span class="${ok ? 'v' : 'x'}">${ok ? 'signature valid' : 'SIGNATURE INVALID'}</span></div><pre></pre>`;
-    d.querySelector('pre').textContent = e.content;
-    list.appendChild(d);
-  }
-}
-try {
-  const { bytes, src } = await fetchCar();
-  const { events, manifest } = await unpack(bytes);
-  if (!events.length) throw new Error('seal has no events.ndjson');
-  render(events, manifest, src);
-} catch (err) {
-  badge.className = 'badge bad'; badge.textContent = `Could not open the seal: ${err.message}`;
-}
-</script>
+<script type="module" src="./viewer.js"></script>
 </body>
 </html>
