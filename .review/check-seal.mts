@@ -1,0 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { readSealCar } from '../src/read-car.ts';
+import { verifyAll } from '../src/verify.ts';
+import * as Piece from '@filoz\/synapse-core\/piece';
+const bytes = new Uint8Array(readFileSync('/private/tmp/claude-501/-Users-sgtpooki-code-work-filoz/7ed58c8f-0fd3-42ea-ac6b-7c54e5ef3468/scratchpad/seal-verify/bafkzcibd4qeqovohe3xhi64gdmc42cerqil6fv5le3oibdk5gk7dksh3irhd5dqn.car'));
+console.log('piece matches', (await Piece.calculate(bytes)).toString() === 'bafkzcibd4qeqovohe3xhi64gdmc42cerqil6fv5le3oibdk5gk7dksh3irhd5dqn');
+const { events, manifest } = await readSealCar(bytes);
+const { results } = verifyAll(events);
+console.log('events', events.length, 'verified', results.filter(r => r.idMatches && r.signatureValid).length);
+console.log(JSON.stringify(manifest, null, 1));
+for (const e of events) console.log('-', e.pubkey.slice(0,8), JSON.stringify(e.content).slice(0,120));
