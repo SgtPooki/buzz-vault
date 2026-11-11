@@ -6,6 +6,7 @@
   "host": {
     "dynamicUploads": true,
     "managedFiles": true,
+    "files": true,
     "processes": [
       {
         "id": "pin",

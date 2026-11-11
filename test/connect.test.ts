@@ -20,6 +20,7 @@ import {
   parseSessionEnv,
   saveSession,
   STORAGE_KEY,
+  tryReadHostSessionEnv,
   watchAuthorization,
   type VaultSession,
   type WatchAuthorizationOptions,
@@ -320,6 +321,43 @@ SCOPES=createDataSet,addPieces,encrypt
           'SESSION_KEY=0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nWALLET_ADDRESS=0x44f08D1beFe61255b3C3A349C392C560FA333759\nNETWORK=mainnet'
         )
       ).toThrow('Expected NETWORK=calibration')
+    })
+  })
+
+  describe('tryReadHostSessionEnv', () => {
+    it('returns null if host or host.readFile is missing', async () => {
+      expect(await tryReadHostSessionEnv(undefined)).toBeNull()
+      expect(await tryReadHostSessionEnv({})).toBeNull()
+    })
+
+    it('reads and parses session.env when available via host.readFile', async () => {
+      const mockEnv = `
+SESSION_KEY=0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+WALLET_ADDRESS=0x44f08D1beFe61255b3C3A349C392C560FA333759
+NETWORK=calibration
+`
+      const mockHost = {
+        readFile: vi.fn().mockImplementation(async (path: string) => {
+          if (path.includes('filecoin-pin')) {
+            return new TextEncoder().encode(mockEnv)
+          }
+          throw new Error('File not found')
+        }),
+      }
+
+      const session = await tryReadHostSessionEnv(mockHost)
+      expect(session).not.toBeNull()
+      expect(session?.ownerAddress).toBe('0x44f08D1beFe61255b3C3A349C392C560FA333759')
+      expect(session?.network).toBe('calibration')
+      expect(mockHost.readFile).toHaveBeenCalled()
+    })
+
+    it('returns null when all candidate paths throw or fail', async () => {
+      const mockHost = {
+        readFile: vi.fn().mockRejectedValue(new Error('No such file')),
+      }
+      const session = await tryReadHostSessionEnv(mockHost)
+      expect(session).toBeNull()
     })
   })
 })

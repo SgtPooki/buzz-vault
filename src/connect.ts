@@ -456,3 +456,25 @@ export function parseSessionEnv(text: string): VaultSession {
   }
 }
 
+// Tries reading session.env from standard filecoin-pin config directories via host.readFile
+export async function tryReadHostSessionEnv(host?: { readFile?: (path: string) => Promise<Uint8Array> }): Promise<VaultSession | null> {
+  if (!host?.readFile) return null;
+  const paths = [
+    '~/Library/Application Support/filecoin-pin/session.env',
+    '~/.config/filecoin-pin/session.env',
+  ];
+  for (const p of paths) {
+    try {
+      const bytes = await host.readFile(p);
+      if (bytes && bytes.length > 0) {
+        const text = new TextDecoder().decode(bytes);
+        return parseSessionEnv(text);
+      }
+    } catch {
+      // Continue to next candidate path
+    }
+  }
+  return null;
+}
+
+

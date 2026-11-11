@@ -10,7 +10,7 @@ transforming...
 ✓ 1423 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/manifest.json      0.32 kB │ gzip:   0.22 kB
-dist/plugin.js      1,392.71 kB │ gzip: 332.52 kB
+dist/manifest.json      0.34 kB │ gzip:   0.22 kB
+dist/plugin.js      1,404.35 kB │ gzip: 335.66 kB
 
-✓ built in 243ms
+✓ built in 232ms
