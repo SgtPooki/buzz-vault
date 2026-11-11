@@ -26,7 +26,7 @@
   <div class="badge wait" id="badge">Fetching from the storage provider…</div>
   <div id="list"></div>
   <details><summary>How this page verifies</summary>
-    It downloads the CAR by piece CID from the storage provider named in the URL, unpacks <code>events.ndjson</code> and <code>manifest.json</code>, recomputes each event id (NIP-01 sha256 over the canonical array) and checks the Schnorr signature against the author's key. Nothing is trusted from the server beyond the bytes. Libraries load from esm.sh: @ipld/car, @helia/unixfs, @noble/curves, @noble/hashes.
+    It downloads the CAR from the storage provider URLs carried in this link (the copies recorded at seal time), unpacks <code>events.ndjson</code> and <code>manifest.json</code>, recomputes each event id (NIP-01 sha256 over the canonical array) and checks the Schnorr signature against the author's key. It does not recompute the piece CID in the browser, so a provider could serve a different validly signed transcript; the vault_turn_get agent tool does check the piece CID. Libraries load from esm.sh: @ipld/car, @helia/unixfs, @noble/curves, @noble/hashes.
   </details>
 </main>
 <script type="module">
@@ -38,7 +38,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from 'https://esm.sh/@noble/hashe
 
 const q = new URLSearchParams(location.search);
 const piece = q.get('piece');
-const sources = (q.get('src') ? [q.get('src')] : []).concat(piece ? [`https://calib.ezpdpz.net/public/${piece}`, `https://pdp-m2.reiers.io/public/${piece}`] : []);
+const sources = q.getAll('src').filter((u) => /^https:\/\//.test(u));
 const badge = document.getElementById('badge'), list = document.getElementById('list'), where = document.getElementById('where');
 where.textContent = piece ? `piece ${piece}` : 'no piece CID in the URL';
 
@@ -53,7 +53,7 @@ async function fetchCar() {
   for (const src of sources) {
     try { const r = await fetch(src); if (r.ok) return { bytes: new Uint8Array(await r.arrayBuffer()), src }; } catch {}
   }
-  throw new Error('no storage provider answered');
+  throw new Error(sources.length ? 'no storage provider answered' : 'no provider URL in the link');
 }
 async function unpack(bytes) {
   const reader = await CarReader.fromBytes(bytes);
@@ -64,6 +64,7 @@ async function unpack(bytes) {
   const fs = unixfs({ blockstore: bs });
   const text = async (p) => { const cs = []; for await (const c of fs.cat(p)) cs.push(c); return new TextDecoder().decode(await new Blob(cs).arrayBuffer()); };
   const out = { events: [], manifest: null };
+  if (!root) throw new Error('empty CAR');
   for await (const e of fs.ls(root.toString())) {
     if (e.name === 'events.ndjson') out.events = (await text(e.path)).split('\n').filter(Boolean).map((l) => JSON.parse(l));
     if (e.name === 'manifest.json') out.manifest = JSON.parse(await text(e.path));
@@ -86,6 +87,7 @@ function render(events, manifest, src) {
 try {
   const { bytes, src } = await fetchCar();
   const { events, manifest } = await unpack(bytes);
+  if (!events.length) throw new Error('seal has no events.ndjson');
   render(events, manifest, src);
 } catch (err) {
   badge.className = 'badge bad'; badge.textContent = `Could not open the seal: ${err.message}`;

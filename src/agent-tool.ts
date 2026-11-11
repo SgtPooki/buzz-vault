@@ -4,6 +4,7 @@ import { encryptCar, hexToBytes } from './encrypt.js';
 import { loadSeals } from './seal.js';
 import { readSealCar } from './read-car.js';
 import { verifyAll } from './verify.js';
+import * as Piece from '@filoz/synapse-core/piece';
 import { uploadArchiveWithSynapse } from './upload.js';
 import { formatReceiptMessage } from './receipt.js';
 import { loadSession } from './connect.js';
@@ -147,6 +148,8 @@ export function createVaultTurnGetTool(host: Host): AddedTool {
         }
       }
       if (!bytes) return `Could not fetch ${pieceCid} from ${urls.length} known copies.`;
+      const actual = (await Piece.calculate(bytes)).toString();
+      if (actual !== pieceCid) return `Bytes do not match ${pieceCid} (got ${actual}); refusing to read them.`;
       const { events, manifest } = await readSealCar(bytes);
       const { results, allValid } = verifyAll(events);
       const lines = events.map((e) => `[${new Date(e.created_at * 1000).toISOString()}] ${e.pubkey.slice(0, 8)}: ${e.content}`);

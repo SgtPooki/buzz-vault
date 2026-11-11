@@ -48,5 +48,6 @@ export async function readSealCar(carBytes: Uint8Array): Promise<{ events: Nostr
     if (entry.name === 'events.ndjson') events = (await text(entry.path)).split('\n').filter(Boolean).map((l) => JSON.parse(l));
     if (entry.name === 'manifest.json') manifest = JSON.parse(await text(entry.path));
   }
+  if (events.length === 0) throw new Error('Seal has no events.ndjson');
   return { events, manifest };
 }

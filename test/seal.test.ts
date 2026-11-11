@@ -4,7 +4,8 @@ import { toHex, hexToBytes as viemHexToBytes } from 'viem';
 const bytesToHex = (b: Uint8Array) => toHex(b).slice(2);
 const hexToBytes = (h: string) => viemHexToBytes(`0x${h}`);
 import { nip01Id, verifyAll, verifyEvent } from '../src/verify.js';
-import { buildSealFiles, formatSealCard, isSealable, turnEventIds, type LocalWork } from '../src/seal.js';
+import { buildSealFiles, collectTurnEvents, formatSealCard, isSealable, sealAndPost, turnEventIds, SEALS_KEY, type LocalWork } from '../src/seal.js';
+import { vi } from 'vitest';
 import { buildCar } from '../src/export.js';
 import { readSealCar } from '../src/read-car.js';
 
@@ -68,16 +69,62 @@ describe('seal', () => {
   it('writes a card with no placeholders', () => {
     const events = [signed('x')];
     const { manifest } = buildSealFiles(work, events);
-    const card = formatSealCard('Atlas', {
-      manifest,
-      rootCid: 'bafyroot',
-      events,
-      upload: { pieceCid: 'bafkzcibdabc123456789xyz', dataSetId: '52644', providers: ['9', '2'], retrievalUrls: ['https://sp/public/x'], proofStatus: 'pending' },
-    });
+    const card = formatSealCard({ agent: 'Atlas', pieceCid: 'bafkzcibdabc123456789xyz', dataSetId: '52644', providers: ['9', '2'], retrievalUrls: ['https://sp/public/x', 'https://sp2/public/x'], signatures: manifest.signatures });
+    expect(card).toContain('src=https%3A%2F%2Fsp2%2Fpublic%2Fx');
     expect(card).toContain('Atlas finished');
     expect(card).toContain('1 signed messages verified');
     expect(card).toContain('data set 52644');
     expect(card).toContain('?piece=bafkzcibdabc123456789xyz');
     expect(card).not.toMatch(/demo|unknown|f01234|undefined|null/);
+  });
+});
+
+describe('collectTurnEvents', () => {
+  const reqId = 'a'.repeat(64), repId = 'b'.repeat(64);
+  const w2: LocalWork = { ...work, messageId: reqId, threadRootId: reqId, publishedMessageIds: [repId] };
+  const req = { ...signed('request', 1), id: reqId }, rep = { ...signed('reply', 2), id: repId };
+
+  it('reads only the missing ids with the limit inside the filter, like the host demands', async () => {
+    const readPage = vi.fn(async (filters: any[]) => {
+      const f = filters[0];
+      if (!(f.kinds === undefined && f.ids?.length)) throw new Error('Relay reads need valid kinds or event IDs');
+      if (!Number.isInteger(f.limit) || f.limit < 1 || f.limit > 500) throw new Error('Relay read limit must be between 1 and 500');
+      return { events: [{ ...rep, delivery: { local: true } }] };
+    });
+    const session: any = { readPage, messages: {}, agentActivity: {} };
+    const events = await collectTurnEvents(session, w2, new Map([[reqId, req]]));
+    expect(readPage).toHaveBeenCalledWith([{ ids: [repId], limit: 1 }]);
+    expect(events.map((e) => e.id)).toEqual([reqId, repId]);
+    expect(Object.keys(events[1])).not.toContain('delivery');
+  });
+
+  it('refuses a partial turn and unsigned events', async () => {
+    const session: any = { readPage: async () => ({ events: [] }), messages: {}, agentActivity: {} };
+    await expect(collectTurnEvents(session, w2, new Map([[reqId, req]]))).rejects.toThrow(/not yet readable/);
+    const unsigned = new Map([[reqId, { ...req, sig: undefined }], [repId, rep]]);
+    await expect(collectTurnEvents(session, w2, unsigned)).rejects.toThrow(/without signatures/);
+  });
+});
+
+describe('sealAndPost', () => {
+  it('uploads once and retries only the card after a failed post', async () => {
+    const store: Record<string, string> = {};
+    (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; }, removeItem: (k: string) => { delete store[k]; } };
+    store['buzz-vault:session:v1'] = JSON.stringify({ sessionPrivateKey: '0x' + '2'.repeat(64), sessionAddress: '0x' + '3'.repeat(40), ownerAddress: '0x' + '4'.repeat(40), expiry: 9e12, network: 'calibration' });
+    const upload = await import('../src/upload.js');
+    const up = vi.spyOn(upload, 'uploadArchiveWithSynapse').mockResolvedValue({ pieceCid: 'bafkzcibdxyz', dataSetId: '1', providers: ['9', '2'], retrievalUrls: ['https://sp/public/bafkzcibdxyz'], proofStatus: 'pending' });
+    const reqId = 'a'.repeat(64), repId = 'b'.repeat(64);
+    const w2: LocalWork = { ...work, messageId: reqId, threadRootId: reqId, publishedMessageIds: [repId] };
+    const live = new Map([[reqId, { ...signed('request', 1), id: reqId }], [repId, { ...signed('reply', 2), id: repId }]]);
+    const reply = vi.fn().mockRejectedValueOnce(new Error('relay down')).mockResolvedValue('card-id');
+    const session: any = { readPage: async () => ({ events: [] }), messages: { reply, send: vi.fn() }, agentActivity: {} };
+    await expect(sealAndPost(session, {} as any, w2, live)).rejects.toThrow('relay down');
+    const r = await sealAndPost(session, {} as any, w2, live);
+    expect(up).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledTimes(2);
+    expect(reply.mock.calls[1][1]).toBe(repId);
+    expect(r.cardPosted).toBe(true);
+    expect(JSON.parse(store[SEALS_KEY])).toHaveLength(1);
+    up.mockRestore();
   });
 });
