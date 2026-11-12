@@ -30,6 +30,33 @@ Buzz Vault bridges Block's Buzz communication client with Filecoin Onchain Cloud
 
 ---
 
+## Turn Seal
+
+When a local agent's turn finishes, Buzz Vault seals it to Filecoin with no click. The trigger is `session.agentActivity`: a turn is sealed once it reports `done`, nothing is still publishing, and it has at least one published reply.
+
+For each finished turn the plugin:
+
+1. Collects the signed request event and the agent's reply events, from its live event buffer first and a relay read for the rest.
+2. Verifies each event's NIP-01 id and Schnorr signature.
+3. Writes a plaintext CAR with two files: `events.ndjson` (the signed events) and `manifest.json` (agent, channel, request id, event ids, signature counts, and what was omitted).
+4. Uploads two copies to Filecoin Calibration providers via the Synapse SDK.
+5. Posts a card in the request thread:
+
+   > **Scribe finished** · 2 signed messages verified · saved on Filecoin Calibration, data set 52644 · 2 copies
+   > Open result · piece `bafkzcibd4qeq…hd5dqn`
+   > `<root CID> https://<provider>/public/<piece CID>`
+
+   The last line carries the full root CID and the `/public/` piece URL so [buzz-cid-card](https://github.com/SgtPooki/buzz-cid-card) can fetch the CAR and render a verified preview of the root.
+
+The seal records what the agent said, not what it did. It omits tool calls, filesystem changes, and attachment bytes, and `manifest.json` lists those omissions.
+
+### Reading a seal
+
+- **`vault_turn_get` agent tool:** takes a piece CID (and an optional URL when the seal is not in this device's index), fetches the piece, checks that `Piece.calculate` over the bytes matches the CID, verifies every signature, and returns the transcript.
+- **Web viewer:** "Open result" links to `https://sgtpooki.github.io/buzz-vault/viewer.html?piece=<piece CID>&src=<provider URL>`. The page fetches the CAR, unpacks it, and verifies every id and signature in the browser. It is built from `src/viewer.ts` by `pnpm build:viewer` into `docs/viewer.js`, with no CDN imports (an earlier esm.sh version never finished loading in Chrome). It does not recompute the piece CID ([#8](https://github.com/SgtPooki/buzz-vault/issues/8)).
+
+---
+
 ## How It Works
 
 ```mermaid
@@ -59,15 +86,19 @@ flowchart TD
 
 ```text
 buzz-vault/
-├── manifest.json            # Buzz plugin manifest declaring host capabilities
+├── manifest.json            # Buzz plugin manifest declaring host capabilities (incl. dynamicUploads)
 ├── src/
-│   ├── index.ts             # Plugin entry point (registers panel, agent tool, settings card)
+│   ├── index.tsx            # Plugin entry point (settings card, panel, agent tools, turn seal watcher)
 │   ├── connect.ts           # Session key generation, console auth, and host file auto-detection
 │   ├── export.ts            # Nostr event fetching, media bundling, and UnixFS CAR builder
 │   ├── encrypt.ts           # AES-256-GCM envelope encryption via filecoin-encryption-envelope
 │   ├── upload.ts            # Synapse SDK client and host fetch shim for binary PDP uploads
 │   ├── receipt.ts           # Receipt formatting and channel publication
-│   ├── agent-tool.ts        # 'vault_archive' agent tool for autonomous archiving
+│   ├── seal.ts              # Turn Seal: watch agent turns, build the seal CAR, upload, post the card
+│   ├── verify.ts            # NIP-01 id and Schnorr signature verification
+│   ├── read-car.ts          # Reads a seal CAR back into events and manifest
+│   ├── viewer.ts            # Browser entry for the standalone seal viewer
+│   ├── agent-tool.ts        # 'vault_archive' and 'vault_turn_get' agent tools
 │   └── ui/
 │       ├── SettingsCard.tsx # Filecoin connection UI (Console, File auto-detect, File upload, Paste)
 │       └── VaultPanel.tsx   # Channel archive trigger and real-time status monitor
@@ -75,8 +106,11 @@ buzz-vault/
 │   ├── decryptor.html       # Standalone zero-dependency web decryptor
 │   ├── decryptor.ts         # Standalone CLI decryptor
 │   └── recovery-drill.ts    # End-to-end cryptographic integrity verification drill
-├── test/                    # Comprehensive Vitest test suite
-└── buzz-app-host-upload.patch # Upstream patch adding dynamic upload primitive to Buzz host
+├── docs/                    # GitHub Pages: seal viewer (viewer.html, bundled viewer.js) and drill runbook
+├── .review/                 # Evidence from live runs (notes, scripts, screenshots, video)
+├── test/                    # Vitest test suite
+├── vite.viewer.config.ts    # Bundles src/viewer.ts into docs/viewer.js
+└── buzz-app-host-upload.patch # Patch to the Buzz host app (see below)
 ```
 
 ---
@@ -149,12 +183,39 @@ To inspect archives visually, open `tools/decryptor.html` in any web browser and
 pnpm test
 ```
 
-Runs the 48-test vitest suite covering:
+Runs the 58-test vitest suite covering:
 - Host fetch shimming and upload sequence dispatch.
 - Session key parsing, registry log polling, and candidate path resolution.
 - Nostr event serialization, `imeta` parsing, and CAR construction.
 - Encryption envelopes and signature auditing.
 - Receipt formatting with strict placeholder prohibition.
+- Turn Seal: signature verification, sealable turns, event collection, seal CAR round-trip, card format, and upload-once card retry.
+
+---
+
+## Host Patch
+
+`buzz-app-host-upload.patch` applies to the Buzz host app. It adds `host.sendBytesOnce` (a single raw-bytes PUT/POST) and extends `host.request` and `host.requestBytes` to dynamic public HTTPS origins when the plugin manifest sets `host.dynamicUploads`. It also adds the `allow-plugin-host-send-bytes-once` capability. Storage provider origins are not known ahead of time, so the plugin cannot declare them in its manifest.
+
+---
+
+## Operational Notes
+
+- The Claude harness in Buzz needs an Anthropic API key saved in Buzz settings. The Codex harness uses the local `codex` login. The seal itself is harness-agnostic.
+- Storage provider `/piece/` URLs redirect to `/public/`, and the host follows no redirects. The seal card's last line uses the `/public/` URL for that reason.
+
+---
+
+## Known Limits
+
+- [#4](https://github.com/SgtPooki/buzz-vault/issues/4) No feedback while a turn is being sealed.
+- [#5](https://github.com/SgtPooki/buzz-vault/issues/5) Turns of remote agents are never sealed; only local agent turns are.
+- [#6](https://github.com/SgtPooki/buzz-vault/issues/6) The seal omits what the agent did, only what it said.
+- [#7](https://github.com/SgtPooki/buzz-vault/issues/7) The seal receipt is a plain chat message.
+- [#8](https://github.com/SgtPooki/buzz-vault/issues/8) The web viewer does not verify the piece CID.
+- [#9](https://github.com/SgtPooki/buzz-vault/issues/9) Channel attachments are not archived, only referenced.
+- [#10](https://github.com/SgtPooki/buzz-vault/issues/10) Attachments are not kept reachable when the media host fails.
+- [#11](https://github.com/SgtPooki/buzz-vault/issues/11) An agent's memory is not backed up or restorable across machines.
 
 ---
 
